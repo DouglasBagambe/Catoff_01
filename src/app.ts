@@ -4,6 +4,7 @@ import express from "express";
 import dotenv from "dotenv";
 import riotRoutes from "./routes/riot";
 import { monitoringMiddleware } from "./middleware/monitoring";
+import previewRoutes from "./routes/preview";
 
 // Load environment variables
 dotenv.config();
@@ -26,6 +27,8 @@ app.get("/health", (req, res) => {
 
 // Error handling middleware
 app.use(
+  "/preview",
+  previewRoutes,
   (
     err: Error,
     req: express.Request,

@@ -29,8 +29,17 @@ export class ZKService {
 
   async generateProof(stats: GameStats) {
     try {
+      const circuitSignals: { [key: string]: any } = {
+        gameId: stats.gameId,
+        timestamp: stats.timestamp,
+        kills: stats.kills,
+        deaths: stats.deaths,
+        assists: stats.assists,
+        score: stats.score,
+      };
+
       const { proof, publicSignals } = await groth16.fullProve(
-        stats,
+        circuitSignals,
         "circuits/GameStats_js/GameStats.wasm",
         "circuits/GameStats_0001.zkey"
       );

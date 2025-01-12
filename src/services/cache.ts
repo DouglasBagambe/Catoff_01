@@ -1,6 +1,7 @@
 import { createClient } from "redis";
 
 class CacheService {
+  [x: string]: any;
   private client;
 
   constructor() {

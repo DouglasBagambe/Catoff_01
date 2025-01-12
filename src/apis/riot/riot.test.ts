@@ -37,12 +37,14 @@ describe("RiotAPI", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedCacheService.get.mockResolvedValue(null);
+    (mockedCacheService.get as jest.Mock).mockImplementation(async () => null);
   });
 
   describe("getSummoner", () => {
     it("should return cached data when available", async () => {
-      mockedCacheService.get.mockResolvedValueOnce(mockCombinedData);
+      (mockedCacheService.get as jest.Mock).mockResolvedValueOnce(
+        mockCombinedData
+      );
 
       const result = await RiotAPI.getSummoner("TestSummoner", "EUW");
 
@@ -85,7 +87,7 @@ describe("RiotAPI", () => {
     const mockMatches = ["match1", "match2"];
 
     it("should return cached matches when available", async () => {
-      mockedCacheService.get.mockResolvedValueOnce(mockMatches);
+      (mockedCacheService.get as jest.Mock).mockResolvedValueOnce(mockMatches);
 
       const result = await RiotAPI.getMatchHistory("puuid123", 2);
 
@@ -121,7 +123,9 @@ describe("RiotAPI", () => {
     const mockMatchData = { gameId: "123" /* other match data */ };
 
     it("should return cached match details when available", async () => {
-      mockedCacheService.get.mockResolvedValueOnce(mockMatchData);
+      (mockedCacheService.get as jest.Mock).mockResolvedValueOnce(
+        mockMatchData
+      );
 
       const result = await RiotAPI.getMatchDetails("EUW1_123");
 
