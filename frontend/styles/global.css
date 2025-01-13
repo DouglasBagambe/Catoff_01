@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+body {
+  @apply antialiased;
+}
+
+/* Add custom background gradient */
+.bg-gradient-gaming {
+  @apply bg-gradient-to-br from-gray-900 to-blue-900;
+}
+
+/* Custom input styles */
+.input-gaming {
+  @apply bg-gray-700/50 rounded-lg border border-blue-500/30 p-3 focus:outline-none focus:border-blue-400;
+}
+
+/* Custom button styles */
+.button-gaming {
+  @apply bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 
+         text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-[1.02];
+}

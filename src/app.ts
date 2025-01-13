@@ -1,34 +1,32 @@
 // src/app.ts
-
 import express from "express";
 import dotenv from "dotenv";
 import riotRoutes from "./routes/riot";
 import { monitoringMiddleware } from "./middleware/monitoring";
 import previewRoutes from "./routes/preview";
+import cors from "cors";
 
-// Load environment variables
 dotenv.config();
 
-// Create Express app
 const app = express();
 
 // Middleware
+app.use(cors()); // Add CORS support
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(monitoringMiddleware);
 
-// Routes
+// API Routes
 app.use("/api", riotRoutes);
+app.use("/api/preview", previewRoutes);
 
 // Health check endpoint
-app.get("/health", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
 // Error handling middleware
 app.use(
-  "/preview",
-  previewRoutes,
   (
     err: Error,
     req: express.Request,
