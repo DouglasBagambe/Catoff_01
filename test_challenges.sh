@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Configuration variables
-RIOT_TOKEN="RGAPI-63488878-6a0e-49a2-b38b-20782eabfb1e"
-CREATOR_WALLET="/home/db/new-wallet.json"  # Updated to use full path
+RIOT_TOKEN="${RIOT_API_KEY}"
+CREATOR_WALLET="/home/db/new-wallet.json"
 PROGRAM_ID="GBUZP3faF5m8nctD6NwoC5ZCGNbq95d1g55LuR7U97FS"
 RPC_URL="https://api.devnet.solana.com"
 
