@@ -1,19 +1,9 @@
 import React, { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import {
-  User,
-  Search,
-  GameController,
-  Sword,
-  Wallet
-} from "lucide-react";
+import { User, Search, GameController, Sword, Wallet } from "lucide-react";
 import { Program, web3 } from "@project-serum/anchor";
-import {
-  PublicKey,
-  Transaction,
-  SystemProgram,
-} from "@solana/web3.js";
+import { PublicKey, Transaction, SystemProgram } from "@solana/web3.js";
 
 // Move to environment variables
 const RIOT_API_KEY = process.env.NEXT_PUBLIC_RIOT_API_KEY;
@@ -42,15 +32,17 @@ const GamingChallenge = () => {
     try {
       setLoading(true);
       setError("");
-      
+
       const response = await fetch(
-        `/api/riot/account/${encodeURIComponent(playerName)}/${encodeURIComponent(tagline)}`
+        `/api/riot/account/${encodeURIComponent(
+          playerName
+        )}/${encodeURIComponent(tagline)}`
       );
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       setPlayerData(data);
       await fetchMatches(data.puuid);
@@ -66,12 +58,14 @@ const GamingChallenge = () => {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/riot/matches/${encodeURIComponent(puuid)}`);
-      
+      const response = await fetch(
+        `/api/riot/matches/${encodeURIComponent(puuid)}`
+      );
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const matchIds = await response.json();
       setMatches(matchIds);
     } catch (error) {
@@ -108,9 +102,12 @@ const GamingChallenge = () => {
 
       // Ensure program is properly initialized
       const program = await Program.at(PROGRAM_ID, wallet);
-      
+
       const createChallengeIx = await program.methods
-        .createChallenge(new web3.BN(parseFloat(wagerAmount) * web3.LAMPORTS_PER_SOL), statsHash)
+        .createChallenge(
+          new web3.BN(parseFloat(wagerAmount) * web3.LAMPORTS_PER_SOL),
+          statsHash
+        )
         .accounts({
           challenge: challengeKeypair.publicKey,
           creator: wallet.publicKey,
@@ -119,8 +116,10 @@ const GamingChallenge = () => {
         .instruction();
 
       const transaction = new Transaction().add(createChallengeIx);
-      const signature = await wallet.sendTransaction(transaction, [challengeKeypair]);
-      
+      const signature = await wallet.sendTransaction(transaction, [
+        challengeKeypair,
+      ]);
+
       await program.provider.connection.confirmTransaction(signature);
       setChallengeStatus("active");
     } catch (error) {
@@ -144,9 +143,9 @@ const GamingChallenge = () => {
 
     try {
       setLoading(true);
-      
+
       const program = await Program.at(PROGRAM_ID, wallet);
-      
+
       const acceptChallengeIx = await program.methods
         .acceptChallenge()
         .accounts({
@@ -158,7 +157,7 @@ const GamingChallenge = () => {
 
       const transaction = new Transaction().add(acceptChallengeIx);
       const signature = await wallet.sendTransaction(transaction, []);
-      
+
       await program.provider.connection.confirmTransaction(signature);
       setChallengeStatus("accepted");
     } catch (error) {
@@ -191,7 +190,7 @@ const GamingChallenge = () => {
 
       const transaction = new Transaction().add(completeChallengeIx);
       const signature = await wallet.sendTransaction(transaction, []);
-      
+
       await program.provider.connection.confirmTransaction(signature);
       setChallengeStatus("completed");
     } catch (error) {
@@ -258,7 +257,7 @@ const GamingChallenge = () => {
                 className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2"
               >
                 <Search className="w-5 h-5" />
-                {loading ? 'Loading...' : 'Fetch Player Data'}
+                {loading ? "Loading..." : "Fetch Player Data"}
               </button>
 
               {playerData && (
@@ -345,7 +344,7 @@ const GamingChallenge = () => {
                   }
                   className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg"
                 >
-                  {loading ? 'Creating...' : 'Create Challenge'}
+                  {loading ? "Creating..." : "Create Challenge"}
                 </button>
 
                 {challengeAccount && (
@@ -359,7 +358,7 @@ const GamingChallenge = () => {
                       }
                       className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg"
                     >
-                      {loading ? 'Accepting...' : 'Accept Challenge'}
+                      {loading ? "Accepting..." : "Accept Challenge"}
                     </button>
 
                     <button
@@ -369,7 +368,7 @@ const GamingChallenge = () => {
                       disabled={loading || challengeStatus !== "accepted"}
                       className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg"
                     >
-                      {loading ? 'Completing...' : 'Complete Challenge'}
+                      {loading ? "Completing..." : "Complete Challenge"}
                     </button>
                   </>
                 )}
@@ -393,10 +392,14 @@ const GamingChallenge = () => {
               Challenge Details
             </h3>
             <div className="space-y-2">
-              <p className="font-mono break-all"><p className="font-mono break-all">Challenge Account: {challengeAccount}</p>
+              <p className="font-mono break-all">
+                Challenge Account: {challengeAccount}
+              </p>
               <p>Status: {challengeStatus}</p>
               {challengerWallet && (
-                <p className="font-mono break-all">Challenger: {challengerWallet}</p>
+                <p className="font-mono break-all">
+                  Challenger: {challengerWallet}
+                </p>
               )}
             </div>
           </div>
