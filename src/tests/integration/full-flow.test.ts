@@ -2,7 +2,6 @@ import request from "supertest";
 import app from "../../app";
 import WebSocket from "ws";
 import RiotAPI from "../../apis/riot/riot";
-import MonitoringService from "../../services/monitoring";
 
 describe("Full Integration Flow", () => {
   let ws: WebSocket;

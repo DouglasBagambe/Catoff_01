@@ -7,11 +7,7 @@ import cors from "cors";
 import riotRoutes from "./routes/riot";
 import previewRoutes from "./routes/preview";
 import socialRoutes from "./routes/social";
-import challengeRoutes from "./routes/challenge";
 import webhookRouter from "./services/webhook";
-
-// Middleware imports
-import { monitoringMiddleware } from "./middleware/monitoring";
 
 // Service imports
 import TelegramService from "./social/telegram";
@@ -56,13 +52,11 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(monitoringMiddleware);
 
 // Mount API routes
 app.use("/api", riotRoutes);
 app.use("/api/preview", previewRoutes);
 app.use("/api/social", socialRoutes);
-app.use("/api/challenge", challengeRoutes);
 app.use("/webhook", webhookRouter);
 
 // Health check endpoint with WebSocket status
