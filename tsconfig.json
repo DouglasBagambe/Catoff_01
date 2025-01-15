@@ -109,9 +109,6 @@
   ],
   "exclude": [
     "node_modules", // Exclude node_modules folder
-    "frontend/components/GamingChallenge.tsx",
-    "src/apis/epic/epic.ts",
-    "src/services/blockchain.ts",
-    "src/services/solana.ts"
+    "frontend/components/GamingChallenge.tsx"
   ]
 }

@@ -6,7 +6,7 @@ import {
   Transaction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-import { Program, AnchorProvider, web3 } from "@project-serum/anchor";
+import { Program, AnchorProvider, web3, Idl } from "@project-serum/anchor";
 import { ZKService } from "./zk";
 import { IDL } from "@project-serum/anchor/dist/cjs/native/system";
 
@@ -19,13 +19,13 @@ export class SolanaService {
   private constructor() {
     // Initialize Solana connection
     this.connection = new Connection(
-      process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
+      process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com"
     );
 
     // Load the IDL and program
     this.program = new Program(
       IDL as Idl,
-      new PublicKey(process.env.PROGRAM_ID)
+      new PublicKey(process.env.PROGRAM_ID!)
     );
     this.zkService = ZKService.getInstance();
   }
