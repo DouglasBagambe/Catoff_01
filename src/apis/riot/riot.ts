@@ -1,4 +1,5 @@
 // src/apis/riot/riot.ts
+
 import axios, { AxiosError } from "axios";
 import dotenv from "dotenv";
 import CacheService from "../../services/cache";
@@ -54,7 +55,7 @@ class RiotAPI {
     try {
       // Check cache first
       const cachedData = await CacheService.get(cacheKey);
-      if (cachedData) {
+      if (cachedData !== undefined && cachedData !== null) {
         return cachedData;
       }
 
@@ -93,7 +94,7 @@ class RiotAPI {
     try {
       // Check cache first
       const cachedData = await CacheService.get(cacheKey);
-      if (cachedData) {
+      if (cachedData !== undefined && cachedData !== null) {
         return cachedData;
       }
 
@@ -101,7 +102,7 @@ class RiotAPI {
       const matches = await this.makeRequest<string[]>(matchesUrl);
 
       // Cache for 5 minutes (matches change frequently)
-      await CacheService.set(cacheKey, matches, 300);
+      CacheService.set(cacheKey, matches, 300);
       return matches;
     } catch (error) {
       const customError = new Error(
@@ -120,15 +121,15 @@ class RiotAPI {
     try {
       // Check cache first
       const cachedData = await CacheService.get(cacheKey);
-      if (cachedData) {
+      if (cachedData !== undefined && cachedData !== null) {
         return cachedData;
       }
 
       const matchUrl = `${this.REGION_BASE_URL}/lol/match/v5/matches/${matchId}`;
-      const matchData = await this.makeRequest(matchUrl);
+      const matchData = await this.makeRequest<any>(matchUrl);
 
       // Cache for 1 hour (match details don't change)
-      await CacheService.set(cacheKey, matchData, 3600);
+      await CacheService.set(cacheKey, matchData as string[], 3600);
       return matchData;
     } catch (error) {
       const customError = new Error(

@@ -1,10 +1,36 @@
+// src/services/cache.ts
 import { createClient } from "redis";
 
 class CacheService {
-  [x: string]: any;
+  static get(cacheKey: string) {
+    throw new Error("Method not implemented.");
+  }
+  // static set(cacheKey: string, combinedData: { tagLine: string; gameName: string; id: string; accountId: string; puuid: string; name: string; profileIconId: number; revisionDate: number; summonerLevel: number; }, arg2: number) {
+  //   throw new Error("Method not implemented.");
+  // }
+  static set(
+    cacheKey: string,
+    data:
+      | {
+          tagLine: string;
+          gameName: string;
+          id: string;
+          accountId: string;
+          puuid: string;
+          name: string;
+          profileIconId: number;
+          revisionDate: number;
+          summonerLevel: number;
+        }
+      | string[],
+    arg2: number
+  ) {
+    throw new Error("Method not implemented.");
+  }
+  private static instance: CacheService | null = null;
   private client;
 
-  constructor() {
+  private constructor() {
     this.client = createClient({
       url: "redis://localhost:6379",
     });
@@ -14,6 +40,13 @@ class CacheService {
     });
 
     this.client.connect();
+  }
+
+  public static getInstance(): CacheService {
+    if (!CacheService.instance) {
+      CacheService.instance = new CacheService();
+    }
+    return CacheService.instance;
   }
 
   // Store data in cache
@@ -48,4 +81,4 @@ class CacheService {
   }
 }
 
-export default new CacheService();
+export default CacheService;

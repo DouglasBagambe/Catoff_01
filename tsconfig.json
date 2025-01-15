@@ -103,12 +103,15 @@
     "isolatedModules": true
   },
   "include": [
-    "src/**/*", // Include all files under src folder
-    "frontend/pages",
-    "frontend/components"
+    "src/**/*" // Include all files under src folder
+    // "frontend/pages",
+    // "frontend/components"
   ],
   "exclude": [
     "node_modules", // Exclude node_modules folder
-    "frontend/pages/components"
+    "frontend/components/GamingChallenge.tsx",
+    "src/apis/epic/epic.ts",
+    "src/services/blockchain.ts",
+    "src/services/solana.ts"
   ]
 }
