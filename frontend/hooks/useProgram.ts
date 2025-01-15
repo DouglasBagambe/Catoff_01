@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import dotenv from "dotenv";
+
+dotenv.config();
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Program, AnchorProvider, Idl } from "@project-serum/anchor";
 import { PublicKey, Connection } from "@solana/web3.js";
 
-const PROGRAM_ID = process.env.NEXT_PUBLIC_PROGRAM_ID;
+const PROGRAM_ID = "EqRQ5Ab5XnoE5x5nJWiRX4UzDrEt1VDiKiHmev4FsGS9";
 
 if (!PROGRAM_ID) {
   throw new Error("NEXT_PUBLIC_PROGRAM_ID environment variable is not set");

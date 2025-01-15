@@ -1,6 +1,8 @@
 // pages/api/riot/matches/[puuid].ts
 import { NextApiRequest, NextApiResponse } from "next";
 
+const RIOT_API_BASE_URL = process.env.RIOT_API_BASE_URL;
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -21,7 +23,7 @@ export default async function handler(
       `${RIOT_API_BASE_URL}/lol/match/v5/matches/by-puuid/${puuid}/ids?count=${count}`,
       {
         headers: {
-          "X-Riot-Token": RIOT_API_KEY || "",
+          "X-Riot-Token": process.env.RIOT_API_KEY || "",
         },
       }
     );

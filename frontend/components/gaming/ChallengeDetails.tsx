@@ -24,7 +24,7 @@ export const ChallengeDetails: React.FC<ChallengeDetailsProps> = ({
       await completeChallenge({
         challengeId: challenge.id,
         winner,
-        stats: challenge.stats,
+        stats: challenge.stats!,
       });
 
       onComplete?.(winner);

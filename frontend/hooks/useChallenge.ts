@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PublicKey, Transaction } from "@solana/web3.js";
+import { PublicKey, Transaction, SystemProgram } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useProgram } from "./useProgram";
 import {
@@ -40,15 +40,16 @@ export const useChallenge = () => {
         .createChallenge(new PublicKey(wagerAmount), statsHash)
         .accounts({
           challenge: challengeKeypair,
-          creator: wallet.publicKey,
+          creator: wallet.publicKey!,
           systemProgram: SystemProgram.programId,
         })
         .instruction();
 
       const transaction = new Transaction().add(createChallengeIx);
-      const signature = await wallet.sendTransaction(transaction, [
-        challengeKeypair,
-      ]);
+      const signature = await wallet.sendTransaction(
+        transaction,
+        program.provider.connection
+      );
 
       await program.provider.connection.confirmTransaction(signature);
       setChallengeStatus("active");
@@ -84,13 +85,16 @@ export const useChallenge = () => {
         .acceptChallenge()
         .accounts({
           challenge: new PublicKey(challengeId),
-          challenger: wallet.publicKey,
+          challenger: wallet.publicKey!,
           systemProgram: SystemProgram.programId,
         })
         .instruction();
 
       const transaction = new Transaction().add(acceptChallengeIx);
-      const signature = await wallet.sendTransaction(transaction, []);
+      const signature = await wallet.sendTransaction(
+        transaction,
+        program.provider.connection
+      );
 
       await program.provider.connection.confirmTransaction(signature);
       setChallengeStatus("accepted");
@@ -125,13 +129,16 @@ export const useChallenge = () => {
         .completeChallenge(new PublicKey(winner), zkProof)
         .accounts({
           challenge: new PublicKey(challengeId),
-          creator: wallet.publicKey,
-          challenger: wallet.publicKey,
+          creator: wallet.publicKey!,
+          challenger: wallet.publicKey!,
         })
         .instruction();
 
       const transaction = new Transaction().add(completeChallengeIx);
-      const signature = await wallet.sendTransaction(transaction, []);
+      const signature = await wallet.sendTransaction(
+        transaction,
+        program.provider.connection
+      );
 
       await program.provider.connection.confirmTransaction(signature);
       setChallengeStatus("completed");

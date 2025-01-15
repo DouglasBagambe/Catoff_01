@@ -1,7 +1,7 @@
 // pages/index.tsx
-import { PlayerSearch } from "@/components/gaming/PlayerSearch";
-import { MatchList } from "@/components/gaming/MatchList";
-import { ChallengeForm } from "@/components/gaming/ChallengeForm";
+import PlayerSearch from "@/components/gaming/PlayerSearch";
+import MatchList from "@/components/gaming/MatchList";
+import ChallengeForm from "@/components/gaming/ChallengeForm";
 import { ChallengeDetails } from "@/components/gaming/ChallengeDetails";
 import { useState } from "react";
 import { PlayerData, MatchData } from "@/types";
@@ -18,7 +18,10 @@ export default function Home() {
           {playerData && (
             <MatchList
               puuid={playerData.puuid}
-              onMatchSelect={setSelectedMatch}
+              onMatchSelect={(match) =>
+                setSelectedMatch(match as unknown as MatchData)
+              }
+              matches={[]}
             />
           )}
         </div>

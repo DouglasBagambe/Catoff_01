@@ -1,5 +1,5 @@
 import React from "react";
-import { GameController } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 
 interface Match {
   id: string;
@@ -10,16 +10,16 @@ interface Match {
   deaths: number;
   assists: number;
 }
-
 interface MatchListProps {
+  puuid: string;
   matches: Match[];
-  onSelectMatch?: (match: Match) => void;
+  onMatchSelect: (match: Match) => void;
   selectedMatchId?: string;
 }
 
 const MatchList: React.FC<MatchListProps> = ({
   matches,
-  onSelectMatch,
+  onMatchSelect,
   selectedMatchId,
 }) => {
   if (!matches.length) {
@@ -33,7 +33,7 @@ const MatchList: React.FC<MatchListProps> = ({
       {matches.map((match) => (
         <button
           key={match.id}
-          onClick={() => onSelectMatch?.(match)}
+          onClick={() => onMatchSelect?.(match)}
           className={`w-full p-4 rounded-lg border transition-all duration-200 ${
             selectedMatchId === match.id
               ? "border-blue-400 bg-blue-500/20"
@@ -42,7 +42,7 @@ const MatchList: React.FC<MatchListProps> = ({
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <GameController className="w-5 h-5 text-blue-400" />
+              <Gamepad2 className="w-5 h-5 text-blue-400" />
               <div className="text-left">
                 <div className="font-semibold text-white">{match.gameType}</div>
                 <div className="text-sm text-gray-400">

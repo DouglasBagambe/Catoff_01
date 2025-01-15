@@ -2,40 +2,61 @@ import React, { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useChallenge } from "../../hooks/useChallenge";
 import Button from "../common/Button";
+import { MatchData } from "@/next-env";
 
 interface ChallengeFormProps {
   onChallengeCreated?: (challengeId: string) => void;
+  match: MatchData;
 }
 
 const ChallengeForm: React.FC<ChallengeFormProps> = ({
   onChallengeCreated,
 }) => {
   const wallet = useWallet();
-  const { createChallenge, isLoading } = useChallenge();
+  const { createChallenge } = useChallenge();
   const [wagerAmount, setWagerAmount] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
 
     if (!wallet.connected) {
       setError("Please connect your wallet first");
+      setIsLoading(false);
       return;
     }
 
     if (!wagerAmount || isNaN(parseFloat(wagerAmount))) {
       setError("Please enter a valid wager amount");
+      setIsLoading(false);
       return;
     }
 
     try {
-      const challengeId = await createChallenge(parseFloat(wagerAmount));
-      onChallengeCreated?.(challengeId);
+      const challengeId = await createChallenge({
+        wagerAmount: parseFloat(wagerAmount),
+        stats: {
+          matchId: "", // Add appropriate matchId value
+          playerStats: {
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+            championId: 0,
+            win: false,
+          },
+        },
+        riotId: "", // Add appropriate riotId value
+      });
+      if (challengeId) {
+        onChallengeCreated?.(challengeId);
+      }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to create challenge"
-      );
+      setError("An error occurred while creating the challenge");
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -51,6 +51,7 @@
     "redis": "^4.7.0",
     "snarkjs": "^0.7.5",
     "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7",
     "telegraf": "^4.16.3",
     "twitter-api-v2": "^1.19.0",
     "winston": "^3.17.0",
