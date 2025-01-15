@@ -1,3 +1,5 @@
+// frontend/hooks/useProgram.ts
+
 import { useEffect, useState } from "react";
 import dotenv from "dotenv";
 
@@ -41,16 +43,19 @@ export const useProgram = () => {
         );
 
         // TODO: Import actual IDL
-        const idl: Idl = await Program.fetchIdl(
-          new PublicKey(PROGRAM_ID),
-          provider
-        );
+        const idl = await Program.fetchIdl(new PublicKey(PROGRAM_ID), provider);
 
         if (!idl) {
           throw new Error("Failed to fetch program IDL");
         }
 
-        const program = new Program(idl, new PublicKey(PROGRAM_ID), provider);
+        const program = new Program(
+          idl as Idl,
+          new PublicKey(PROGRAM_ID),
+          provider
+        );
+
+        // const program = new Program(idl, new PublicKey(PROGRAM_ID), provider);
         setProgram(program);
       } catch (err) {
         setError(

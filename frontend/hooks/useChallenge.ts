@@ -1,3 +1,5 @@
+//src/hooks/useChallenge.ts
+
 import { useState } from "react";
 import { PublicKey, Transaction, SystemProgram } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";

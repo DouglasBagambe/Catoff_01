@@ -1,9 +1,23 @@
+// frontend/components/gaming/PlayerSearch.tsx
+
 import React, { useState } from "react";
-import { Search, Loader } from "lucide-react";
+import { Search } from "lucide-react";
 import Button from "../common/Button";
 
 interface PlayerSearchProps {
-  onPlayerFound?: (playerData: any) => void;
+  onPlayerFound?: (playerData: CombinedSummonerData) => void;
+}
+
+interface CombinedSummonerData {
+  id: string;
+  accountId: string;
+  puuid: string;
+  name: string;
+  profileIconId: number;
+  revisionDate: number;
+  summonerLevel: number;
+  tagLine: string;
+  gameName: string;
 }
 
 const PlayerSearch: React.FC<PlayerSearchProps> = ({ onPlayerFound }) => {
@@ -23,16 +37,23 @@ const PlayerSearch: React.FC<PlayerSearchProps> = ({ onPlayerFound }) => {
 
     try {
       const response = await fetch(
-        `/api/riot/account/${encodeURIComponent(
+        `/api/riot/summoner/${encodeURIComponent(
           playerName
         )}/${encodeURIComponent(tagline)}`
       );
 
-      if (!response.ok) {
-        throw new Error("Player not found");
+      let data;
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        throw new Error("Invalid response from server");
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to find player");
+      }
+
       onPlayerFound?.(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to find player");
@@ -86,7 +107,16 @@ const PlayerSearch: React.FC<PlayerSearchProps> = ({ onPlayerFound }) => {
           disabled={!playerName || !tagline || isLoading}
           className="w-full"
         >
-          Search Player
+          {isLoading ? (
+            <div className="flex items-center justify-center">
+              <span className="mr-2">Searching...</span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center">
+              <Search className="w-5 h-5 mr-2" />
+              <span>Search Player</span>
+            </div>
+          )}
         </Button>
       </div>
     </div>
