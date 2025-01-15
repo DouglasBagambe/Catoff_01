@@ -4,6 +4,7 @@ import { ethers } from "ethers";
 import { ZKService } from "./zk";
 
 export class BlockchainService {
+  [x: string]: any;
   private static instance: BlockchainService;
   private provider: ethers.providers.Provider;
   private contract: ethers.Contract;

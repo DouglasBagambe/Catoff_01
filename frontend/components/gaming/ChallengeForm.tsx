@@ -2,7 +2,16 @@ import React, { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useChallenge } from "../../hooks/useChallenge";
 import Button from "../common/Button";
-import { MatchData } from "@/next-env";
+interface MatchData {
+  matchId: string;
+  playerStats: {
+    kills: number;
+    deaths: number;
+    assists: number;
+    championId: number;
+    win: boolean;
+  };
+}
 
 interface ChallengeFormProps {
   onChallengeCreated?: (challengeId: string) => void;

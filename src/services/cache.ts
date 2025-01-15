@@ -2,31 +2,6 @@
 import { createClient } from "redis";
 
 class CacheService {
-  static get(cacheKey: string) {
-    throw new Error("Method not implemented.");
-  }
-  // static set(cacheKey: string, combinedData: { tagLine: string; gameName: string; id: string; accountId: string; puuid: string; name: string; profileIconId: number; revisionDate: number; summonerLevel: number; }, arg2: number) {
-  //   throw new Error("Method not implemented.");
-  // }
-  static set(
-    cacheKey: string,
-    data:
-      | {
-          tagLine: string;
-          gameName: string;
-          id: string;
-          accountId: string;
-          puuid: string;
-          name: string;
-          profileIconId: number;
-          revisionDate: number;
-          summonerLevel: number;
-        }
-      | string[],
-    arg2: number
-  ) {
-    throw new Error("Method not implemented.");
-  }
   private static instance: CacheService | null = null;
   private client;
 
@@ -39,7 +14,9 @@ class CacheService {
       console.error("Redis Error:", err);
     });
 
-    this.client.connect();
+    this.client.connect().catch((err) => {
+      console.error("Failed to connect to Redis:", err);
+    });
   }
 
   public static getInstance(): CacheService {
@@ -49,8 +26,11 @@ class CacheService {
     return CacheService.instance;
   }
 
-  // Store data in cache
-  async set(key: string, value: any, expirationInSeconds: number = 3600) {
+  public async set(
+    key: string,
+    value: any,
+    expirationInSeconds: number = 3600
+  ): Promise<void> {
     try {
       await this.client.set(key, JSON.stringify(value), {
         EX: expirationInSeconds,
@@ -60,8 +40,7 @@ class CacheService {
     }
   }
 
-  // Get data from cache
-  async get(key: string) {
+  public async get<T>(key: string): Promise<T | null> {
     try {
       const data = await this.client.get(key);
       return data ? JSON.parse(data) : null;
@@ -71,8 +50,7 @@ class CacheService {
     }
   }
 
-  // Delete from cache
-  async delete(key: string) {
+  public async delete(key: string): Promise<void> {
     try {
       await this.client.del(key);
     } catch (error) {
