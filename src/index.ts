@@ -1,31 +1,43 @@
+// src/index.ts
 import app from "./app";
+import initializeApp from "./app";
 import http from "http";
 import WebSocketService from "./services/websocket";
 import dotenv from "dotenv";
+import { Request, Response } from "express";
 
 dotenv.config();
 
 const port = process.env.PORT || 3001;
+let server: http.Server;
 
-const server = http.createServer(app);
-const wsService = new WebSocketService(server);
+const startServer = async () => {
+  try {
+    const req = {} as Request; // Define req object
+    const res = {} as Response; // Define res object
+    await initializeApp(req, res);
 
-// Add error handling for server startup
-server.on("error", (e: NodeJS.ErrnoException) => {
-  if (e.code === "EADDRINUSE") {
-    console.error(`Port ${port} is already in use`);
-  } else {
-    console.error("An error occurred while starting the server:", e);
+    // Create HTTP server
+    server = http.createServer(app);
+
+    // Initialize WebSocket service
+    new WebSocketService(server);
+
+    // Start listening
+    server.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+    });
+
+    return server;
+  } catch (error) {
+    console.error("Server startup failed:", error);
+    process.exit(1);
   }
-  process.exit(1);
-});
+};
 
-// Add more detailed logging
-server.listen(port, () => {
-  console.log(`Backend server running on port ${port}`);
-  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log("Loaded services:");
-  console.log("- Telegram webhook endpoint: /webhook/telegram");
-  console.log("- WebSocket service: Initialized");
-  console.log("- Riot API routes: /api/*");
+// Start the server
+startServer().catch((error) => {
+  console.error("Failed to start server:", error);
+  process.exit(1);
 });
