@@ -1,22 +1,16 @@
 // src/services/cache.ts
-import { createClient } from "redis";
 
-class CacheService {
+interface CacheItem<T> {
+  value: T;
+  expiry?: number;
+}
+
+export class CacheService {
   private static instance: CacheService | null = null;
-  private client;
+  private cache: Map<string, CacheItem<any>>;
 
   private constructor() {
-    this.client = createClient({
-      url: "redis://localhost:6379",
-    });
-
-    this.client.on("error", (err) => {
-      console.error("Redis Error:", err);
-    });
-
-    this.client.connect().catch((err) => {
-      console.error("Failed to connect to Redis:", err);
-    });
+    this.cache = new Map();
   }
 
   public static getInstance(): CacheService {
@@ -26,37 +20,55 @@ class CacheService {
     return CacheService.instance;
   }
 
-  public async set(
+  public async set<T>(
     key: string,
-    value: any,
+    value: T,
     expirationInSeconds: number = 3600
   ): Promise<void> {
-    try {
-      await this.client.set(key, JSON.stringify(value), {
-        EX: expirationInSeconds,
-      });
-    } catch (error) {
-      console.error("Cache set error:", error);
-    }
+    const expiry =
+      expirationInSeconds > 0
+        ? Date.now() + expirationInSeconds * 1000
+        : undefined;
+    this.cache.set(key, { value, expiry });
   }
 
   public async get<T>(key: string): Promise<T | null> {
-    try {
-      const data = await this.client.get(key);
-      return data ? JSON.parse(data) : null;
-    } catch (error) {
-      console.error("Cache get error:", error);
+    const item = this.cache.get(key);
+
+    if (!item) {
       return null;
     }
+
+    if (item.expiry && item.expiry < Date.now()) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return item.value as T;
   }
 
   public async delete(key: string): Promise<void> {
-    try {
-      await this.client.del(key);
-    } catch (error) {
-      console.error("Cache delete error:", error);
+    this.cache.delete(key);
+  }
+
+  public clear(): void {
+    this.cache.clear();
+  }
+
+  public isReady(): boolean {
+    return true;
+  }
+
+  public cleanup(): void {
+    const now = Date.now();
+    for (const [key, item] of this.cache.entries()) {
+      if (item.expiry && item.expiry < now) {
+        this.cache.delete(key);
+      }
     }
   }
 }
 
-export default CacheService;
+// Create and export a default instance
+const cacheService = CacheService.getInstance();
+export default cacheService;

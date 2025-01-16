@@ -2,7 +2,8 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import monitorRequest from "./middleware/monitoring";
+import http from "http";
+import WebSocketService from "./services/websocket";
 
 // Route imports
 import riotRoutes from "./routes/riot";
@@ -14,21 +15,20 @@ import webhookRouter from "./services/webhook";
 import TelegramService from "./social/telegram";
 import TwitterService from "./social/x";
 import PreviewService from "./services/preview";
-import CacheService from "./services/cache";
+import cacheService from "./services/cache";
 
-// Load environment variables
 dotenv.config();
 
-// Initialize Express app
 const app = express();
+const port = process.env.PORT || 3001;
 
 // Service instances
 export let telegramService: TelegramService;
 export let twitterService: TwitterService;
 export let previewService: PreviewService;
-export let cacheService: CacheService;
+// export let cacheService: CacheService;
 
-// Middleware configuration
+// Basic middleware setup
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || "*",
@@ -38,33 +38,40 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(monitorRequest);
 
-// Initialize services before mounting routes
-export const initializeApp = async () => {
+// Simple request logging
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    console.log({
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration: `${Date.now() - start}ms`,
+    });
+  });
+  next();
+});
+
+// Initialize all services and start server
+const startApp = async () => {
   try {
-    // Initialize Cache Service
-    cacheService = CacheService.getInstance();
-
-    // Initialize Preview Service
+    // Initialize services
+    // cacheService = CacheService.getInstance();
     previewService = PreviewService.getInstance();
     await previewService.initialize();
-
-    // Initialize Social Services
     telegramService = new TelegramService();
     twitterService = new TwitterService();
-
-    // Start Telegram bot
     telegramService.start();
 
-    // Mount routes after services are initialized
+    // Mount routes
     app.use("/api", riotRoutes);
     app.use("/api/preview", previewRoutes);
     app.use("/api/social", socialRoutes);
     app.use("/webhook", webhookRouter);
 
     // Health check endpoint
-    app.use("/api/health", (req, res) => {
+    app.get("/api/health", (req, res) => {
       res.json({
         status: "ok",
         timestamp: new Date().toISOString(),
@@ -78,14 +85,52 @@ export const initializeApp = async () => {
       });
     });
 
-    console.log("Application initialized successfully");
+    // Create and start server
+    const server = http.createServer(app);
+    new WebSocketService(server);
+
+    server.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+    });
+
+    // Cleanup function
+    const cleanup = async () => {
+      try {
+        if (telegramService) telegramService.stop();
+        if (previewService) await previewService.cleanup();
+      } catch (error) {
+        console.error("Cleanup error:", error);
+      }
+    };
+
+    // Error handlers
+    process.on("uncaughtException", async (error) => {
+      console.error("Uncaught Exception:", error);
+      await cleanup();
+      process.exit(1);
+    });
+
+    process.on("unhandledRejection", async (reason) => {
+      console.error("Unhandled Rejection:", reason);
+      await cleanup();
+      process.exit(1);
+    });
+
+    process.on("SIGTERM", async () => {
+      console.log("SIGTERM received");
+      await cleanup();
+      process.exit(0);
+    });
+
+    return server;
   } catch (error) {
-    console.error("Application initialization failed:", error);
-    throw error;
+    console.error("Server startup failed:", error);
+    process.exit(1);
   }
 };
 
-// Error handling middleware - must be after routes
+// Error handling middleware
 app.use(
   (
     err: Error,
@@ -104,37 +149,5 @@ app.use(
   }
 );
 
-// Cleanup function
-export const cleanup = async () => {
-  try {
-    if (telegramService) {
-      telegramService.stop();
-    }
-    if (previewService) {
-      await previewService.cleanup();
-    }
-  } catch (error) {
-    console.error("Cleanup error:", error);
-  }
-};
-
-// Process handlers
-process.on("uncaughtException", async (error) => {
-  console.error("Uncaught Exception:", error);
-  await cleanup();
-  process.exit(1);
-});
-
-process.on("unhandledRejection", async (reason) => {
-  console.error("Unhandled Rejection:", reason);
-  await cleanup();
-  process.exit(1);
-});
-
-process.on("SIGTERM", async () => {
-  console.log("SIGTERM received");
-  await cleanup();
-  process.exit(0);
-});
-
+export { startApp };
 export default app;
