@@ -1,11 +1,12 @@
+// src/social/telegram.ts
+
 import { Telegraf, Context } from "telegraf";
 import { Message } from "telegraf/typings/core/types/typegram";
-import { Connection, PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
-import { Program, AnchorProvider, Wallet } from "@project-serum/anchor";
-import * as anchor from "@project-serum/anchor";
+import { Connection, PublicKey, Keypair } from "@solana/web3.js";
+import { AnchorProvider, Wallet } from "@project-serum/anchor";
 import { createHash } from "crypto";
 import dotenv from "dotenv";
-import { IDL } from "../solana/gaming_challenge.json";
+import { GamingChallengeService } from "../solana/gaming_challenge_service";
 
 dotenv.config();
 
@@ -35,52 +36,46 @@ interface RiotAccount {
   tagLine: string;
 }
 
-interface Match {
-  id: string;
-  timestamp: number;
-  gameType: string;
-  result: "win" | "loss";
-  kills: number;
-  deaths: number;
-  assists: number;
-}
-
-class TelegramService {
-  public bot: Telegraf;
+export class TelegramService {
+  private bot: Telegraf;
   private channelId: string;
   private userStates: Map<number, { command: string; data: any }>;
-  private connection: Connection;
-  private provider: AnchorProvider;
-  private program: Program;
+  private gamingService: GamingChallengeService;
+  private botWallet: Keypair;
+  handleAcceptChallenge: any;
+  handleViewChallenge: any;
+  handleHelp: any;
 
   constructor() {
     if (!process.env.TELEGRAM_BOT_TOKEN) {
       throw new Error(
         "TELEGRAM_BOT_TOKEN is not defined in environment variables"
-      );
+      ) as unknown as {
+        status: string;
+        creator: PublicKey;
+        challenger: PublicKey;
+        wagerAmount: any;
+        createdAt: number;
+      };
     }
 
     this.bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
     this.channelId = process.env.TELEGRAM_CHANNEL_ID || "";
     this.userStates = new Map();
 
-    // Initialize Solana connection
-    this.connection = new Connection(
+    // Initialize Solana connection and wallet
+    const connection = new Connection(
       "https://api.devnet.solana.com",
       "confirmed"
     );
+    this.botWallet = Keypair.generate(); // In production, load from secure storage
+    const wallet = new Wallet(this.botWallet);
 
-    // Initialize provider with a keypair (you'll need to manage this securely)
-    const wallet = new Wallet(Keypair.generate()); // Replace with your bot's wallet
-    this.provider = new AnchorProvider(this.connection, wallet, {
-      commitment: "confirmed",
-    });
-
-    // Initialize the program
-    this.program = new Program(
-      IDL,
-      new PublicKey("EqRQ5Ab5XnoE5x5nJWiRX4UzDrEt1VDiKiHmev4FsGS9"),
-      this.provider
+    // Initialize gaming service
+    this.gamingService = new GamingChallengeService(
+      connection,
+      wallet,
+      new PublicKey("EqRQ5Ab5XnoE5x5nJWiRX4UzDrEt1VDiKiHmev4FsGS9")
     );
 
     this.setupCommands();
@@ -98,7 +93,7 @@ class TelegramService {
     this.bot.on("text", this.handleTextInput.bind(this));
 
     this.bot.catch((err: unknown) => {
-      console.error("Telegram Bot Error:", err as Error);
+      console.error("Telegram Bot Error:", err);
     });
   }
 
@@ -318,25 +313,16 @@ Match ${index + 1}:
         createHash("sha256").update(userState.data.riotId).digest()
       );
 
-      // Create a new keypair for the creator
-      const creatorKeypair = Keypair.generate();
-      const challenge = Keypair.generate();
+      // Create challenge using the gaming service
+      const creatorKeypair = Keypair.generate(); // In production, manage keys securely
+      const { challengeAccount, signature } =
+        await this.gamingService.createChallenge(
+          creatorKeypair,
+          wagerAmount,
+          statsHash
+        );
 
-      // Create challenge on-chain
-      const signature = await this.program.methods
-        .createChallenge(
-          new anchor.BN(wagerAmount * 1e9), // Convert SOL to lamports
-          Buffer.from(statsHash)
-        )
-        .accounts({
-          challenge: challenge.publicKey,
-          creator: creatorKeypair.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([creatorKeypair, challenge])
-        .rpc();
-
-      const challengeId = challenge.publicKey.toBase58();
+      const challengeId = challengeAccount.toBase58();
 
       await this.broadcastChallenge({
         creator: ctx.from?.username || "Anonymous",
@@ -365,11 +351,13 @@ Use /accept_challenge to accept this challenge!`);
 
     this.userStates.delete(userId);
   }
-
-  private async handleAcceptChallenge(ctx: Context) {
-    if (!ctx.from) return;
-    this.userStates.set(ctx.from.id, { command: "accept_challenge", data: {} });
-    await ctx.reply("Please enter the challenge ID:");
+  broadcastChallenge(arg0: {
+    creator: string;
+    wagerAmount: number;
+    challengeId: string;
+    riotId: any;
+  }) {
+    throw new Error("Method not implemented.");
   }
 
   private async handleAcceptChallengeInput(ctx: Context, userId: number) {
@@ -377,17 +365,12 @@ Use /accept_challenge to accept this challenge!`);
     const challengeId = ctx.message.text;
 
     try {
-      const challengerKeypair = Keypair.generate();
+      const challengerKeypair = Keypair.generate(); // In production, manage keys securely
 
-      const signature = await this.program.methods
-        .acceptChallenge()
-        .accounts({
-          challenge: new PublicKey(challengeId),
-          challenger: challengerKeypair.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([challengerKeypair])
-        .rpc();
+      const signature = await this.gamingService.acceptChallenge(
+        challengerKeypair,
+        new PublicKey(challengeId)
+      );
 
       await this.announceAcceptance({
         challengeId,
@@ -413,11 +396,12 @@ The match can now begin! Good luck!`);
 
     this.userStates.delete(userId);
   }
-
-  private async handleViewChallenge(ctx: Context) {
-    if (!ctx.from) return;
-    this.userStates.set(ctx.from.id, { command: "view_challenge", data: {} });
-    await ctx.reply("Please enter the challenge ID:");
+  announceAcceptance(arg0: {
+    challengeId: string;
+    acceptor: string;
+    riotId: string;
+  }) {
+    throw new Error("Method not implemented.");
   }
 
   private async handleViewChallengeInput(ctx: Context, userId: number) {
@@ -425,17 +409,23 @@ The match can now begin! Good luck!`);
     const challengeId = ctx.message.text;
 
     try {
-      const challengeDetails = await this.program.account.challenge.fetch(
+      const challengeDetails = (await this.gamingService.getChallengeDetails(
         new PublicKey(challengeId)
-      );
+      )) as unknown as {
+        status: string;
+        creator: PublicKey;
+        challenger: PublicKey;
+        wagerAmount: any;
+        createdAt: number;
+      };
 
       await ctx.reply(`
 🔍 Challenge Details:
 
 Status: ${
-        challengeDetails.isComplete
+        challengeDetails.status === "completed"
           ? "Completed"
-          : challengeDetails.isActive
+          : challengeDetails.status === "active"
           ? "Active"
           : "Inactive"
       }
@@ -456,95 +446,6 @@ View on Solana Explorer: https://explorer.solana.com/address/${challengeId}?clus
     this.userStates.delete(userId);
   }
 
-  private async handleHelp(ctx: Context) {
-    const helpMessage = `
-🎮 Catoff Bot Commands:
-
-Player Commands:
-/search_player - Search for a League of Legends player
-/get_matches - View player's recent matches
-/create_challenge - Create a new on-chain challenge
-/accept_challenge - Accept an existing challenge
-/view_challenge - View details of a specific challenge
-
-Other Commands:
-/start - Start the bot
-/help - Show this help message
-
-For detailed instructions, visit catoff.io/help`;
-
-    await ctx.reply(helpMessage);
-  }
-
-  async broadcastChallenge(details: ChallengeDetails) {
-    const message = `
-🎮 New Challenge Created On-Chain!
-
-Creator: ${details.creator}
-LoL Account: ${details.riotId}
-Wager: ${details.wagerAmount} SOL
-Challenge ID: ${details.challengeId}
-
-Accept at: catoff.io/challenge/${details.challengeId}
-Or use /accept_challenge to accept this challenge!`;
-
-    try {
-      await this.bot.telegram.sendMessage(this.channelId, message);
-      return true;
-    } catch (error) {
-      console.error("Failed to broadcast challenge:", error);
-      return false;
-    }
-  }
-
-  async announceAcceptance(details: {
-    challengeId: string;
-    acceptor: string;
-    riotId: string;
-  }) {
-    const message = `
-🤝 Challenge Accepted On-Chain!
-
-Challenge ID: ${details.challengeId}
-Acceptor: ${details.acceptor}
-LoL Account: ${details.riotId}
-
-The match can now begin! Good luck to both players!`;
-
-    try {
-      await this.bot.telegram.sendMessage(this.channelId, message);
-      return true;
-    } catch (error) {
-      console.error("Failed to announce acceptance:", error);
-      return false;
-    }
-  }
-
-  async announceWinner(details: WinnerDetails) {
-    const statsMessage = details.stats
-      ? `\nMatch Stats:
-K/D/A: ${details.stats.kills}/${details.stats.deaths}/${details.stats.assists}`
-      : "";
-
-    const message = `
-🏆 Challenge Complete!
-
-Winner: ${details.winner}
-Prize: ${details.amount} SOL
-Challenge ID: ${details.challengeId}${statsMessage}
-
-View transaction on Solana Explorer!
-Create your own challenge at catoff.io!`;
-
-    try {
-      await this.bot.telegram.sendMessage(this.channelId, message);
-      return true;
-    } catch (error) {
-      console.error("Failed to announce winner:", error);
-      return false;
-    }
-  }
-
   async completeChallenge(
     challengeId: string,
     winner: PublicKey,
@@ -553,15 +454,13 @@ Create your own challenge at catoff.io!`;
     zkProof: number[]
   ) {
     try {
-      const signature = await this.program.methods
-        .completeChallenge(winner, Buffer.from(zkProof))
-        .accounts({
-          challenge: new PublicKey(challengeId),
-          creator: creator.publicKey,
-          challenger: challenger.publicKey,
-        })
-        .signers([creator, challenger])
-        .rpc();
+      const signature = await this.gamingService.completeChallenge(
+        new PublicKey(challengeId),
+        creator,
+        challenger,
+        winner,
+        Buffer.from(zkProof)
+      );
 
       return signature;
     } catch (error) {

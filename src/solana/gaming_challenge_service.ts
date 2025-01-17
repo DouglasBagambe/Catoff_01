@@ -1,40 +1,51 @@
-// src/solana/solana_service.ts
+// src/solana/gaming_challenge_service.ts
 
-import {
-  Connection,
-  PublicKey,
-  Keypair,
-  SystemProgram,
-  Transaction,
-} from "@solana/web3.js";
-import { Program, AnchorProvider, Wallet } from "@project-serum/anchor";
-import * as anchor from "@project-serum/anchor";
-import { IDL, GamingChallenge } from "../solana/gaming_challenge";
+import { Connection, PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
+import { Program, AnchorProvider, Wallet, BN } from "@project-serum/anchor";
+// Import the JSON directly
+import IDL from "../../gaming_challenge/target/idl/gaming_challenge.json";
 
-export class SolanaService {
+// You can still keep the type if you want
+type GamingChallenge = typeof IDL;
+
+export class GamingChallengeService {
   private connection: Connection;
   private provider: AnchorProvider;
   private program: Program<GamingChallenge>;
 
-  constructor() {
-    // Initialize Solana connection (use your preferred RPC endpoint)
-    this.connection = new Connection(
-      "https://api.devnet.solana.com",
-      "confirmed"
-    );
-
-    // Initialize provider with a keypair (you'll need to manage this securely)
-    const wallet = new Wallet(Keypair.generate()); // Replace with your bot's wallet
-    this.provider = new AnchorProvider(this.connection, wallet, {
+  constructor(connection: Connection, wallet: Wallet, programId: PublicKey) {
+    this.connection = connection;
+    this.provider = new AnchorProvider(connection, wallet, {
       commitment: "confirmed",
+      preflightCommitment: "confirmed",
     });
 
-    // Initialize the program
-    this.program = new Program<GamingChallenge>(
-      IDL,
-      new PublicKey("EqRQ5Ab5XnoE5x5nJWiRX4UzDrEt1VDiKiHmev4FsGS9"),
-      this.provider
-    );
+    // Use the JSON IDL directly
+    this.program = new Program(IDL, programId, this.provider);
+  }
+
+  async initialize(authority: Keypair): Promise<string> {
+    try {
+      const stateAddress = PublicKey.findProgramAddressSync(
+        [Buffer.from("state")],
+        this.program.programId
+      )[0];
+
+      const signature = await this.program.methods
+        .initialize()
+        .accounts({
+          authority: authority.publicKey,
+          state: stateAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([authority])
+        .rpc();
+
+      return signature;
+    } catch (error) {
+      console.error("Error initializing program:", error);
+      throw error;
+    }
   }
 
   async createChallenge(
@@ -45,8 +56,9 @@ export class SolanaService {
     const challenge = Keypair.generate();
 
     try {
+      const lamports = new BN(wagerAmount * 1e9);
       const signature = await this.program.methods
-        .createChallenge(new anchor.BN(wagerAmount), Array.from(statsHash))
+        .createChallenge(lamports, statsHash)
         .accounts({
           challenge: challenge.publicKey,
           creator: creator.publicKey,
@@ -88,15 +100,15 @@ export class SolanaService {
   }
 
   async completeChallenge(
+    challengeAccount: PublicKey,
     creator: Keypair,
     challenger: Keypair,
-    challengeAccount: PublicKey,
     winner: PublicKey,
-    zkProof: number[]
+    zkProof: Buffer
   ): Promise<string> {
     try {
       const signature = await this.program.methods
-        .completeChallenge(winner, Buffer.from(zkProof))
+        .completeChallenge(winner, zkProof)
         .accounts({
           challenge: challengeAccount,
           creator: creator.publicKey,
@@ -114,7 +126,7 @@ export class SolanaService {
 
   async getChallengeDetails(challengeAccount: PublicKey) {
     try {
-      const challenge = await this.program.account.Challenge.fetch(
+      const challenge = await this.program.account.challenge.fetch(
         challengeAccount
       );
       return challenge;

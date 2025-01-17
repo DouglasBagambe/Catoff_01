@@ -3,6 +3,15 @@
   "name": "gaming_challenge",
   "instructions": [
     {
+      "name": "initialize",
+      "accounts": [
+        { "name": "authority", "isMut": true, "isSigner": true },
+        { "name": "state", "isMut": true, "isSigner": false },
+        { "name": "systemProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": []
+    },
+    {
       "name": "createChallenge",
       "accounts": [
         { "name": "challenge", "isMut": true, "isSigner": true },
@@ -37,6 +46,13 @@
     }
   ],
   "accounts": [
+    {
+      "name": "GameState",
+      "type": {
+        "kind": "struct",
+        "fields": [{ "name": "authority", "type": "publicKey" }]
+      }
+    },
     {
       "name": "Challenge",
       "type": {

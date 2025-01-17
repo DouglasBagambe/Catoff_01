@@ -1,11 +1,30 @@
 // src/solana/gaming_challenge.ts
 
-import { Idl } from "@project-serum/anchor";
-
 export type GamingChallenge = {
   version: "0.1.0";
   name: "gaming_challenge";
   instructions: [
+    {
+      name: "initialize";
+      accounts: [
+        {
+          name: "authority";
+          isMut: true;
+          isSigner: true;
+        },
+        {
+          name: "state";
+          isMut: true;
+          isSigner: false;
+        },
+        {
+          name: "systemProgram";
+          isMut: false;
+          isSigner: false;
+        }
+      ];
+      args: [];
+    },
     {
       name: "createChallenge";
       accounts: [
@@ -92,7 +111,19 @@ export type GamingChallenge = {
   ];
   accounts: [
     {
-      name: "Challenge";
+      name: "gameState";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "authority";
+            type: "publicKey";
+          }
+        ];
+      };
+    },
+    {
+      name: "challenge";
       type: {
         kind: "struct";
         fields: [
@@ -164,64 +195,178 @@ export type GamingChallenge = {
   ];
 };
 
-export const IDL: Idl = {
+export const IDL: GamingChallenge = {
   version: "0.1.0",
   name: "gaming_challenge",
   instructions: [
     {
+      name: "initialize",
+      accounts: [
+        {
+          name: "authority",
+          isMut: true,
+          isSigner: true,
+        },
+        {
+          name: "state",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "systemProgram",
+          isMut: false,
+          isSigner: false,
+        },
+      ],
+      args: [],
+    },
+    {
       name: "createChallenge",
       accounts: [
-        { name: "challenge", isMut: true, isSigner: true },
-        { name: "creator", isMut: true, isSigner: true },
-        { name: "systemProgram", isMut: false, isSigner: false },
+        {
+          name: "challenge",
+          isMut: true,
+          isSigner: true,
+        },
+        {
+          name: "creator",
+          isMut: true,
+          isSigner: true,
+        },
+        {
+          name: "systemProgram",
+          isMut: false,
+          isSigner: false,
+        },
       ],
       args: [
-        { name: "wagerAmount", type: "u64" },
-        { name: "statsHash", type: { array: ["u8", 32] } },
+        {
+          name: "wagerAmount",
+          type: "u64",
+        },
+        {
+          name: "statsHash",
+          type: {
+            array: ["u8", 32],
+          },
+        },
       ],
     },
     {
       name: "acceptChallenge",
       accounts: [
-        { name: "challenge", isMut: true, isSigner: false },
-        { name: "challenger", isMut: true, isSigner: true },
-        { name: "systemProgram", isMut: false, isSigner: false },
+        {
+          name: "challenge",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "challenger",
+          isMut: true,
+          isSigner: true,
+        },
+        {
+          name: "systemProgram",
+          isMut: false,
+          isSigner: false,
+        },
       ],
       args: [],
     },
     {
       name: "completeChallenge",
       accounts: [
-        { name: "challenge", isMut: true, isSigner: false },
-        { name: "creator", isMut: true, isSigner: true },
-        { name: "challenger", isMut: true, isSigner: true },
+        {
+          name: "challenge",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "creator",
+          isMut: true,
+          isSigner: true,
+        },
+        {
+          name: "challenger",
+          isMut: true,
+          isSigner: true,
+        },
       ],
       args: [
-        { name: "winner", type: "publicKey" },
-        { name: "zkProof", type: "bytes" },
+        {
+          name: "winner",
+          type: "publicKey",
+        },
+        {
+          name: "zkProof",
+          type: "bytes",
+        },
       ],
     },
   ],
   accounts: [
     {
-      name: "Challenge",
+      name: "gameState",
       type: {
         kind: "struct",
         fields: [
-          { name: "creator", type: "publicKey" },
-          { name: "wagerAmount", type: "u64" },
-          { name: "statsHash", type: { array: ["u8", 32] } },
-          { name: "isActive", type: "bool" },
-          { name: "challenger", type: "publicKey" },
-          { name: "isComplete", type: "bool" },
-          { name: "createdAt", type: "i64" },
+          {
+            name: "authority",
+            type: "publicKey",
+          },
+        ],
+      },
+    },
+    {
+      name: "challenge",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "creator",
+            type: "publicKey",
+          },
+          {
+            name: "wagerAmount",
+            type: "u64",
+          },
+          {
+            name: "statsHash",
+            type: {
+              array: ["u8", 32],
+            },
+          },
+          {
+            name: "isActive",
+            type: "bool",
+          },
+          {
+            name: "challenger",
+            type: "publicKey",
+          },
+          {
+            name: "isComplete",
+            type: "bool",
+          },
+          {
+            name: "createdAt",
+            type: "i64",
+          },
         ],
       },
     },
   ],
   errors: [
-    { code: 6000, name: "InvalidWinner", msg: "Invalid winner" },
-    { code: 6001, name: "InvalidWager", msg: "Invalid wager amount" },
+    {
+      code: 6000,
+      name: "InvalidWinner",
+      msg: "Invalid winner",
+    },
+    {
+      code: 6001,
+      name: "InvalidWager",
+      msg: "Invalid wager amount",
+    },
     {
       code: 6002,
       name: "InsufficientFunds",
