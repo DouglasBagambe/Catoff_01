@@ -1,30 +1,67 @@
-// frontend/components/gaming/PlayerSearch.tsx
-
 import React, { useState } from "react";
-import { Search } from "lucide-react";
-import Button from "../common/Button";
+import {
+  Search,
+  User,
+  GamepadIcon,
+  Wallet,
+  Sword,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Target,
+  Trophy,
+  Plus,
+} from "lucide-react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useChallenge } from "@/hooks/useChallenge";
+import { ChallengeData } from "@/types";
+
+const NEXT_PUBLIC_API_URL = "http://localhost:3001";
+
+interface Match {
+  id: string;
+  timestamp: number;
+  gameType: string;
+  result: "win" | "loss";
+  kills: number;
+  deaths: number;
+  assists: number;
+}
+
+interface RiotAccount {
+  puuid: string;
+  gameName: string;
+  tagLine: string;
+}
 
 interface PlayerSearchProps {
-  onPlayerFound?: (playerData: CombinedSummonerData) => void;
+  onPlayerFound?: (playerData: RiotAccount) => void;
+  onMatchesFound?: (matches: Match[]) => void;
+  challenge?: ChallengeData;
+  onChallengeComplete?: (winner: string) => void;
 }
 
-interface CombinedSummonerData {
-  id: string;
-  accountId: string;
-  puuid: string;
-  name: string;
-  profileIconId: number;
-  revisionDate: number;
-  summonerLevel: number;
-  tagLine: string;
-  gameName: string;
-}
-
-const PlayerSearch: React.FC<PlayerSearchProps> = ({ onPlayerFound }) => {
+const PlayerSearch: React.FC<PlayerSearchProps> = ({
+  onPlayerFound,
+  onMatchesFound,
+  challenge,
+  onChallengeComplete,
+}) => {
+  const wallet = useWallet();
+  const {
+    completeChallenge,
+    loading: challengeLoading,
+    error: challengeError,
+  } = useChallenge();
   const [playerName, setPlayerName] = useState("");
   const [tagline, setTagline] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [foundPlayer, setFoundPlayer] = useState<RiotAccount | null>(null);
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [matchError, setMatchError] = useState("");
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [selectedMatchId, setSelectedMatchId] = useState<string>();
 
   const handleSearch = async () => {
     if (!playerName || !tagline) {
@@ -34,26 +71,31 @@ const PlayerSearch: React.FC<PlayerSearchProps> = ({ onPlayerFound }) => {
 
     setIsLoading(true);
     setError("");
+    setFoundPlayer(null);
 
     try {
       const response = await fetch(
-        `/api/riot/summoner/${encodeURIComponent(
+        `${NEXT_PUBLIC_API_URL}/api/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(
           playerName
-        )}/${encodeURIComponent(tagline)}`
+        )}/${encodeURIComponent(tagline)}`,
+        {
+          headers: {
+            Accept: "application/json",
+          },
+        }
       );
 
-      let data;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        data = await response.json();
-      } else {
-        throw new Error("Invalid response from server");
-      }
-
       if (!response.ok) {
-        throw new Error(data.message || "Failed to find player");
+        if (response.status === 404) {
+          throw new Error(
+            "Player not found. Please check the name and tagline."
+          );
+        }
+        throw new Error(`Failed to find player (Status: ${response.status})`);
       }
 
+      const data: RiotAccount = await response.json();
+      setFoundPlayer(data);
       onPlayerFound?.(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to find player");
@@ -62,62 +104,360 @@ const PlayerSearch: React.FC<PlayerSearchProps> = ({ onPlayerFound }) => {
     }
   };
 
+  const handleFetchMatches = async () => {
+    if (!foundPlayer?.puuid) {
+      setMatchError("Player information is required");
+      return;
+    }
+
+    setIsLoadingMatches(true);
+    setMatchError("");
+
+    try {
+      const response = await fetch(
+        `${NEXT_PUBLIC_API_URL}/api/lol/match/v5/matches/by-puuid/${encodeURIComponent(
+          foundPlayer.puuid
+        )}/ids?region=${encodeURIComponent(tagline)}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch matches (Status: ${response.status})`);
+      }
+
+      const matchIds = await response.json();
+      const matchDetailsPromises = matchIds.map(async (matchId: string) => {
+        const matchResponse = await fetch(
+          `${NEXT_PUBLIC_API_URL}/api/lol/match/v5/matches/${matchId}?region=${encodeURIComponent(
+            tagline
+          )}`
+        );
+        if (!matchResponse.ok) {
+          throw new Error(
+            `Failed to fetch match details (Status: ${matchResponse.status})`
+          );
+        }
+        const matchData = await matchResponse.json();
+        const participant = matchData.info.participants.find(
+          (p: any) => p.puuid === foundPlayer.puuid
+        );
+
+        return {
+          id: matchData.metadata.matchId,
+          timestamp: matchData.info.gameCreation,
+          gameType: matchData.info.gameMode,
+          result: participant.win ? "win" : "loss",
+          kills: participant.kills,
+          deaths: participant.deaths,
+          assists: participant.assists,
+        };
+      });
+
+      const matchDetails = await Promise.all(matchDetailsPromises);
+      setMatches(matchDetails);
+      onMatchesFound?.(matchDetails);
+    } catch (err) {
+      setMatchError(
+        err instanceof Error ? err.message : "Failed to fetch matches"
+      );
+      setMatches([]);
+    } finally {
+      setIsLoadingMatches(false);
+    }
+  };
+
+  const handleCompleteChallenge = async (winner: string) => {
+    if (!challenge) return;
+
+    try {
+      await completeChallenge({
+        challengeId: challenge.id,
+        winner,
+        stats: challenge.stats!,
+      });
+
+      onChallengeComplete?.(winner);
+    } catch (error) {
+      console.error("Failed to complete challenge:", error);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      if (!isLoading && playerName && tagline) {
+        handleSearch();
+      }
+    }
+  };
+
+  const handleMatchSelect = (match: Match) => {
+    setSelectedMatchId(match.id);
+  };
+
+  const isCreator = wallet.publicKey?.toString() === challenge?.creator;
+  const isChallenger = wallet.publicKey?.toString() === challenge?.challenger;
+  const canComplete =
+    (isCreator || isChallenger) && challenge && !challenge.isComplete;
+
   return (
-    <div className="bg-gray-800/50 backdrop-blur-md rounded-xl p-6 border border-blue-500/20">
-      <h2 className="text-2xl font-bold mb-6 text-white">Search Player</h2>
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-200 mb-2">
-            Player Name
-          </label>
-          <input
-            type="text"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            className="w-full bg-gray-700/50 rounded-lg border border-blue-500/30 p-3 text-white"
-            placeholder="Enter player name"
-            disabled={isLoading}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-200 mb-2">
-            Tagline
-          </label>
-          <input
-            type="text"
-            value={tagline}
-            onChange={(e) => setTagline(e.target.value)}
-            className="w-full bg-gray-700/50 rounded-lg border border-blue-500/30 p-3 text-white"
-            placeholder="Enter tagline (e.g., EUW)"
-            disabled={isLoading}
-          />
-        </div>
-
-        {error && (
-          <div className="p-4 bg-red-500/20 border border-red-500 rounded-lg text-red-100">
-            {error}
+    <div className="min-h-screen bg-gray-900">
+      {/* Top Navigation Bar */}
+      <nav className="bg-gray-800 border-b border-gray-700 p-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <GamepadIcon className="w-8 h-8 text-blue-400" />
+            <span className="text-2xl font-bold text-white">
+              Gaming Dashboard
+            </span>
           </div>
-        )}
-
-        <Button
-          onClick={handleSearch}
-          isLoading={isLoading}
-          disabled={!playerName || !tagline || isLoading}
-          className="w-full"
-        >
-          {isLoading ? (
-            <div className="flex items-center justify-center">
-              <span className="mr-2">Searching...</span>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center">
-              <Search className="w-5 h-5 mr-2" />
-              <span>Search Player</span>
+          {foundPlayer && (
+            <div className="flex items-center gap-4 bg-gray-700 px-4 py-2 rounded-lg">
+              <User className="w-5 h-5 text-blue-400" />
+              <span className="text-white font-medium">
+                {foundPlayer.gameName}#{foundPlayer.tagLine}
+              </span>
             </div>
           )}
-        </Button>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-12 lg:col-span-4 space-y-6">
+            {/* Left Column - Player Search */}
+            <div className="col-span-12 lg:col-span-4 space-y-6">
+              {/* Search Panel */}
+              <div className="bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-700">
+                <h2 className="text-xl font-bold text-white flex items-center gap-3 mb-6">
+                  <Search className="w-6 h-6 text-blue-400" />
+                  Find Player
+                </h2>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-300 mb-2 block">
+                      Player Name
+                    </label>
+                    <input
+                      type="text"
+                      value={playerName}
+                      onChange={(e) => {
+                        setPlayerName(e.target.value);
+                        setError("");
+                      }}
+                      className="w-full bg-gray-700 rounded-lg border border-gray-600 p-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter player name"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-300 mb-2 block">
+                      Tagline
+                    </label>
+                    <input
+                      type="text"
+                      value={tagline}
+                      onChange={(e) => {
+                        setTagline(e.target.value);
+                        setError("");
+                      }}
+                      className="w-full bg-gray-700 rounded-lg border border-gray-600 p-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter tagline"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSearch}
+                    disabled={!playerName || !tagline || isLoading}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/50 text-white font-medium py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? (
+                      "Searching..."
+                    ) : (
+                      <>
+                        <Search className="w-5 h-5" />
+                        Search
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {error && (
+                  <div className="mt-4 p-4 bg-red-500/20 border border-red-500 rounded-lg text-red-100 text-sm">
+                    {error}
+                  </div>
+                )}
+              </div>
+
+              {/* Challenge Status with Create Button */}
+              <div className="bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-700">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-white flex items-center gap-3 w-2/3">
+                    <Sword className="w-6 h-6 text-purple-400" />
+                    Challenge Status
+                  </h2>
+                  <button
+                    onClick={() => {
+                      /* Add your create challenge logic here */
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors w-1/3"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create Challenge
+                  </button>
+                </div>
+
+                {challenge ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-700/50 p-4 rounded-lg">
+                        <div className="text-gray-400 text-sm mb-1">Status</div>
+                        <div className="flex items-center gap-2">
+                          {challenge.isComplete ? (
+                            <CheckCircle className="w-5 h-5 text-green-400" />
+                          ) : (
+                            <Clock className="w-5 h-5 text-yellow-400" />
+                          )}
+                          <span className="text-white">
+                            {challenge.isComplete ? "Completed" : "Active"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-700/50 p-4 rounded-lg">
+                        <div className="text-gray-400 text-sm mb-1">Wager</div>
+                        <div className="flex items-center gap-2">
+                          <Wallet className="w-5 h-5 text-blue-400" />
+                          <span className="text-white">
+                            {challenge.wagerAmount} SOL
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {canComplete && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <button
+                          onClick={() =>
+                            handleCompleteChallenge(challenge.creator)
+                          }
+                          className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2"
+                        >
+                          <Trophy className="w-4 h-4" />
+                          Creator Won
+                        </button>
+                        <button
+                          onClick={() =>
+                            handleCompleteChallenge(challenge.challenger || "")
+                          }
+                          className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2"
+                        >
+                          <Trophy className="w-4 h-4" />
+                          Challenger Won
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-gray-400 text-center py-4">
+                    No active challenge
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Match History */}
+          <div className="col-span-12 lg:col-span-8">
+            <div className="bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-700 h-full">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white flex items-center gap-3">
+                  <Target className="w-6 h-6 text-purple-400" />
+                  Match History
+                </h2>
+
+                {foundPlayer && (
+                  <button
+                    onClick={handleFetchMatches}
+                    disabled={isLoadingMatches}
+                    className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800/50 text-white font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2"
+                  >
+                    {isLoadingMatches ? (
+                      "Loading..."
+                    ) : (
+                      <>
+                        <GamepadIcon className="w-5 h-5" />
+                        Fetch Matches
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {matchError && (
+                <div className="p-4 bg-red-500/20 border border-red-500 rounded-lg text-red-100 text-sm mb-4">
+                  {matchError}
+                </div>
+              )}
+
+              {matches.length > 0 ? (
+                <div className="overflow-y-auto max-h-[calc(100vh-300px)]">
+                  <table className="w-full">
+                    <thead className="bg-gray-700/50">
+                      <tr>
+                        <th className="text-left p-3 text-gray-300">
+                          Game Type
+                        </th>
+                        <th className="text-left p-3 text-gray-300">Result</th>
+                        <th className="text-center p-3 text-gray-300">K/D/A</th>
+                        <th className="text-right p-3 text-gray-300">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                      {matches.map((match) => (
+                        <tr
+                          key={match.id}
+                          className={`hover:bg-gray-700/30 cursor-pointer ${
+                            selectedMatchId === match.id ? "bg-gray-700/50" : ""
+                          }`}
+                          onClick={() => handleMatchSelect(match)}
+                        >
+                          <td className="p-3 text-gray-300">
+                            {match.gameType}
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                match.result === "win"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {match.result.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center text-gray-300">
+                            {match.kills}/{match.deaths}/{match.assists}
+                          </td>
+                          <td className="p-3 text-right text-gray-300">
+                            {new Date(match.timestamp).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-400">
+                  {foundPlayer
+                    ? "No matches found"
+                    : "Search for a player to view matches"}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

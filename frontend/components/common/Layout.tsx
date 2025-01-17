@@ -21,7 +21,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               >
                 Catoff
               </h1>
-              <div className="hidden md:flex space-x-6">
+              {/* <div className="hidden md:flex space-x-6">
                 <button
                   onClick={() => router.push("/challenges")}
                   className="text-gray-300 hover:text-white transition-colors"
@@ -34,7 +34,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 >
                   Leaderboard
                 </button>
-              </div>
+              </div> */}
             </div>
             <WalletMultiButton />
           </div>

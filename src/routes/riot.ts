@@ -1,7 +1,8 @@
-// src/routes/riot.ts
+// routes/riot.ts
+
 import express from "express";
 import { z } from "zod";
-import RiotAPI from "../apis/riot/riot";
+import { RiotAPI } from "../app";
 import { riotRateLimiter } from "../middleware/rateLimiter";
 import { APIError } from "../utils/errors";
 
@@ -11,21 +12,18 @@ const router = express.Router();
 router.use(riotRateLimiter);
 
 // Input validation schemas
-const summonerSchema = z.object({
+const riotIdSchema = z.object({
   gameName: z.string().min(3).max(16),
   tagLine: z.string().min(2).max(5),
 });
 
-const matchesSchema = z.object({
-  puuid: z.string(),
-  count: z.string().transform(Number).optional(),
-  startTime: z.string().transform(Number).optional(),
-  endTime: z.string().transform(Number).optional(),
-  queue: z.string().transform(Number).optional(),
+const puuidSchema = z.object({
+  puuid: z.string().min(1),
 });
 
-const matchSchema = z.object({
-  matchId: z.string(),
+const activeShardsSchema = z.object({
+  game: z.string().min(1),
+  puuid: z.string().min(1),
 });
 
 // Validation middleware
@@ -54,15 +52,15 @@ const validate =
     }
   };
 
-// Routes
+// Routes matching Riot API endpoints
 router.get(
-  "/summoner/:gameName/:tagLine",
-  validate(summonerSchema),
+  "/riot/account/v1/accounts/by-riot-id/:gameName/:tagLine",
+  validate(riotIdSchema),
   async (req, res, next) => {
     try {
       const { gameName, tagLine } = req.params;
-      const summoner = await RiotAPI.getSummoner(gameName, tagLine);
-      res.json(summoner);
+      const account = await RiotAPI.getAccountByRiotId(gameName, tagLine);
+      res.json(account);
     } catch (error) {
       next(error);
     }
@@ -70,49 +68,77 @@ router.get(
 );
 
 router.get(
-  "/matches/:puuid",
-  validate(matchesSchema),
+  "/riot/account/v1/accounts/by-puuid/:puuid",
+  validate(puuidSchema),
   async (req, res, next) => {
     try {
       const { puuid } = req.params;
-      const { count, startTime, endTime, queue } = req.query;
-      const matches = await RiotAPI.getMatchHistory(
-        puuid,
-        count ? parseInt(count as string) : undefined,
-        startTime ? parseInt(startTime as string) : undefined,
-        endTime ? parseInt(endTime as string) : undefined,
-        queue ? parseInt(queue as string) : undefined
-      );
-      res.json(matches);
+      const account = await RiotAPI.getAccountByPuuid(puuid);
+      res.json(account);
     } catch (error) {
       next(error);
     }
   }
 );
 
-router.get("/match/:matchId", validate(matchSchema), async (req, res, next) => {
+router.get(
+  "/riot/account/v1/active-shards/by-game/:game/by-puuid/:puuid",
+  validate(activeShardsSchema),
+  async (req, res, next) => {
+    try {
+      const { game, puuid } = req.params;
+      const shard = await RiotAPI.getActiveShard(game, puuid);
+      res.json(shard);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+const matchQuerySchema = z.object({
+  puuid: z.string().min(1),
+  region: z.string().min(1),
+  count: z.string().optional(),
+});
+
+// Add this route for getting match IDs
+router.get(
+  "/lol/match/v5/matches/by-puuid/:puuid/ids",
+  validate(matchQuerySchema),
+  async (req, res, next) => {
+    try {
+      const { puuid } = req.params;
+      const region = (req.query.region as string) || "EUW";
+      const count = req.query.count ? parseInt(req.query.count as string) : 10;
+      const matchIds = await RiotAPI.getMatchIds(puuid, region, count);
+      res.json(matchIds);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Modify the match details endpoint to match Riot's structure
+router.get("/lol/match/v5/matches/:matchId", async (req, res, next) => {
   try {
-    const matchData = await RiotAPI.getMatchDetails(req.params.matchId);
-    res.json(matchData);
+    const { matchId } = req.params;
+    const region = (req.query.region as string) || "EUW";
+    const match = await RiotAPI.getMatchDetails(matchId, region);
+    res.json(match);
   } catch (error) {
     next(error);
   }
 });
 
-// Cache management routes (optional, protected by API key)
-router.delete(
-  "/cache/summoner/:gameName/:tagLine",
-  validate(summonerSchema),
+// Update the timeline endpoint to match Riot's structure
+router.get(
+  "/lol/match/v5/matches/:matchId/timeline",
   async (req, res, next) => {
     try {
-      const apiKey = req.headers["x-api-key"];
-      if (apiKey !== process.env.ADMIN_API_KEY) {
-        throw new APIError(401, "Unauthorized");
-      }
-
-      const { gameName, tagLine } = req.params;
-      await RiotAPI.clearSummonerCache(gameName, tagLine);
-      res.json({ message: "Cache cleared successfully" });
+      const { matchId } = req.params;
+      const region = (req.query.region as string) || "EUW";
+      const timeline = await RiotAPI.getMatchTimeline(matchId, region);
+      res.json(timeline);
     } catch (error) {
       next(error);
     }
