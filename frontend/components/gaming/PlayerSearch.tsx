@@ -15,6 +15,11 @@ import {
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useChallenge } from "@/hooks/useChallenge";
 import { ChallengeData } from "@/types";
+import {
+  CreateChallengeDialog,
+  ChallengeList,
+  ChallengeDetailsDialog,
+} from "./ChallengeComponents";
 
 const NEXT_PUBLIC_API_URL = "http://localhost:3001";
 
@@ -41,6 +46,20 @@ interface PlayerSearchProps {
   onChallengeComplete?: (winner: string) => void;
 }
 
+interface Challenge {
+  id: string;
+  creator: string;
+  riotId: string;
+  wagerAmount: number;
+  challenger?: string;
+  isComplete?: boolean;
+  stats?: {
+    kills: number;
+    deaths: number;
+    assists: number;
+  };
+}
+
 const PlayerSearch: React.FC<PlayerSearchProps> = ({
   onPlayerFound,
   onMatchesFound,
@@ -62,6 +81,34 @@ const PlayerSearch: React.FC<PlayerSearchProps> = ({
   const [matchError, setMatchError] = useState("");
   const [matches, setMatches] = useState<Match[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState<string>();
+
+  const [isCreateChallengeOpen, setIsCreateChallengeOpen] = useState(false);
+  const [isChallengeDetailsOpen, setIsChallengeDetailsOpen] = useState(false);
+  const [selectedChallenge, setSelectedChallenge] = useState<Challenge>();
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+
+  const handleCreateChallenge = (challengeData: Omit<Challenge, "id">) => {
+    const newChallenge = {
+      ...challengeData,
+      id: `CH_${Math.random().toString(36).substring(2, 9)}`,
+    };
+    setChallenges((prev) => [...prev, newChallenge]);
+  };
+
+  const handleViewChallenge = (challenge: Challenge) => {
+    setSelectedChallenge(challenge);
+    setIsChallengeDetailsOpen(true);
+  };
+
+  const handleAcceptChallenge = (challengeId: string) => {
+    setChallenges((prev) =>
+      prev.map((challenge) =>
+        challenge.id === challengeId
+          ? { ...challenge, challenger: wallet.publicKey?.toString() }
+          : challenge
+      )
+    );
+  };
 
   const handleSearch = async () => {
     if (!playerName || !tagline) {
@@ -292,76 +339,28 @@ const PlayerSearch: React.FC<PlayerSearchProps> = ({
 
               {/* Challenge Status with Create Button */}
               <div className="bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-700">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-3 w-2/3">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-white flex items-center gap-3">
                     <Sword className="w-6 h-6 text-purple-400" />
                     Challenge Status
                   </h2>
                   <button
-                    onClick={() => {
-                      /* Add your create challenge logic here */
-                    }}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors w-1/3"
+                    onClick={() => setIsCreateChallengeOpen(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
                   >
                     <Plus className="w-4 h-4" />
                     Create Challenge
                   </button>
                 </div>
 
-                {challenge ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-gray-700/50 p-4 rounded-lg">
-                        <div className="text-gray-400 text-sm mb-1">Status</div>
-                        <div className="flex items-center gap-2">
-                          {challenge.isComplete ? (
-                            <CheckCircle className="w-5 h-5 text-green-400" />
-                          ) : (
-                            <Clock className="w-5 h-5 text-yellow-400" />
-                          )}
-                          <span className="text-white">
-                            {challenge.isComplete ? "Completed" : "Active"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-700/50 p-4 rounded-lg">
-                        <div className="text-gray-400 text-sm mb-1">Wager</div>
-                        <div className="flex items-center gap-2">
-                          <Wallet className="w-5 h-5 text-blue-400" />
-                          <span className="text-white">
-                            {challenge.wagerAmount} SOL
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {canComplete && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <button
-                          onClick={() =>
-                            handleCompleteChallenge(challenge.creator)
-                          }
-                          className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2"
-                        >
-                          <Trophy className="w-4 h-4" />
-                          Creator Won
-                        </button>
-                        <button
-                          onClick={() =>
-                            handleCompleteChallenge(challenge.challenger || "")
-                          }
-                          className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2"
-                        >
-                          <Trophy className="w-4 h-4" />
-                          Challenger Won
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                {challenges.length > 0 ? (
+                  <ChallengeList
+                    challenges={challenges}
+                    onViewChallenge={handleViewChallenge}
+                  />
                 ) : (
                   <div className="text-gray-400 text-center py-4">
-                    No active challenge
+                    No active challenges
                   </div>
                 )}
               </div>
@@ -459,6 +458,19 @@ const PlayerSearch: React.FC<PlayerSearchProps> = ({
           </div>
         </div>
       </div>
+
+      <CreateChallengeDialog
+        isOpen={isCreateChallengeOpen}
+        onClose={() => setIsCreateChallengeOpen(false)}
+        onCreateChallenge={handleCreateChallenge}
+      />
+
+      <ChallengeDetailsDialog
+        challenge={selectedChallenge}
+        isOpen={isChallengeDetailsOpen}
+        onClose={() => setIsChallengeDetailsOpen(false)}
+        onAcceptChallenge={handleAcceptChallenge}
+      />
     </div>
   );
 };
