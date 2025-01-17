@@ -1,6 +1,11 @@
 import { Telegraf, Context } from "telegraf";
 import { Message } from "telegraf/typings/core/types/typegram";
+import { Connection, PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
+import { Program, AnchorProvider, Wallet } from "@project-serum/anchor";
+import * as anchor from "@project-serum/anchor";
+import { createHash } from "crypto";
 import dotenv from "dotenv";
+import { IDL } from "../solana/gaming_challenge.json";
 
 dotenv.config();
 
@@ -44,6 +49,9 @@ class TelegramService {
   public bot: Telegraf;
   private channelId: string;
   private userStates: Map<number, { command: string; data: any }>;
+  private connection: Connection;
+  private provider: AnchorProvider;
+  private program: Program;
 
   constructor() {
     if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -55,6 +63,26 @@ class TelegramService {
     this.bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
     this.channelId = process.env.TELEGRAM_CHANNEL_ID || "";
     this.userStates = new Map();
+
+    // Initialize Solana connection
+    this.connection = new Connection(
+      "https://api.devnet.solana.com",
+      "confirmed"
+    );
+
+    // Initialize provider with a keypair (you'll need to manage this securely)
+    const wallet = new Wallet(Keypair.generate()); // Replace with your bot's wallet
+    this.provider = new AnchorProvider(this.connection, wallet, {
+      commitment: "confirmed",
+    });
+
+    // Initialize the program
+    this.program = new Program(
+      IDL,
+      new PublicKey("EqRQ5Ab5XnoE5x5nJWiRX4UzDrEt1VDiKiHmev4FsGS9"),
+      this.provider
+    );
+
     this.setupCommands();
   }
 
@@ -80,8 +108,8 @@ class TelegramService {
 Main Commands:
 /search_player - Search for a player
 /get_matches - Get player's match history
-/create_challenge - Create a challenge
-/accept_challenge - Accept a challenge
+/create_challenge - Create an on-chain challenge
+/accept_challenge - Accept an on-chain challenge
 /view_challenge - View challenge details
 /help - Show detailed help
 
@@ -189,17 +217,17 @@ Use /get_matches to see recent matches`);
     if (!userState.data.puuid) {
       userState.data.puuid = ctx.message.text;
       this.userStates.set(userId, userState);
-      await ctx.reply("Now please enter the tagline:");
+      await ctx.reply("Now please enter the region:");
       return;
     }
 
-    const tagLine = ctx.message.text;
+    const region = ctx.message.text;
 
     try {
       const matchIdsResponse = await fetch(
         `${API_URL}/api/lol/match/v5/matches/by-puuid/${encodeURIComponent(
           userState.data.puuid
-        )}/ids?region=${encodeURIComponent(tagLine)}`
+        )}/ids?region=${encodeURIComponent(region)}`
       );
 
       if (!matchIdsResponse.ok) {
@@ -212,7 +240,7 @@ Use /get_matches to see recent matches`);
         matchIds.slice(0, 5).map(async (matchId: string) => {
           const matchResponse = await fetch(
             `${API_URL}/api/lol/match/v5/matches/${matchId}?region=${encodeURIComponent(
-              tagLine
+              region
             )}`
           );
 
@@ -281,37 +309,50 @@ Match ${index + 1}:
       return;
     }
 
-    const wagerAmount = ctx.message.text;
+    const wagerAmount = parseFloat(ctx.message.text);
     const [gameName, tagLine] = userState.data.riotId.split("#");
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(
-          gameName
-        )}/${encodeURIComponent(tagLine)}`,
-        { headers: { Accept: "application/json" } }
+      // Generate a stats hash from the Riot ID
+      const statsHash = Array.from(
+        createHash("sha256").update(userState.data.riotId).digest()
       );
 
-      if (!response.ok) {
-        throw new Error("Invalid LoL account");
-      }
+      // Create a new keypair for the creator
+      const creatorKeypair = Keypair.generate();
+      const challenge = Keypair.generate();
 
-      const challengeId = "CH_" + Math.random().toString(36).substring(2, 9);
+      // Create challenge on-chain
+      const signature = await this.program.methods
+        .createChallenge(
+          new anchor.BN(wagerAmount * 1e9), // Convert SOL to lamports
+          Buffer.from(statsHash)
+        )
+        .accounts({
+          challenge: challenge.publicKey,
+          creator: creatorKeypair.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([creatorKeypair, challenge])
+        .rpc();
+
+      const challengeId = challenge.publicKey.toBase58();
 
       await this.broadcastChallenge({
         creator: ctx.from?.username || "Anonymous",
-        wagerAmount: parseFloat(wagerAmount),
+        wagerAmount,
         challengeId,
         riotId: userState.data.riotId,
       });
 
       await ctx.reply(`
-🎮 Challenge Created!
+🎮 Challenge Created On-Chain!
 
-ID: ${challengeId}
+Challenge ID: ${challengeId}
 Creator: ${ctx.from?.username}
 LoL Account: ${userState.data.riotId}
 Wager: ${wagerAmount} SOL
+Transaction: https://explorer.solana.com/tx/${signature}?cluster=devnet
 
 Use /accept_challenge to accept this challenge!`);
     } catch (error) {
@@ -336,6 +377,18 @@ Use /accept_challenge to accept this challenge!`);
     const challengeId = ctx.message.text;
 
     try {
+      const challengerKeypair = Keypair.generate();
+
+      const signature = await this.program.methods
+        .acceptChallenge()
+        .accounts({
+          challenge: new PublicKey(challengeId),
+          challenger: challengerKeypair.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([challengerKeypair])
+        .rpc();
+
       await this.announceAcceptance({
         challengeId,
         acceptor: ctx.from?.username || "Anonymous",
@@ -343,10 +396,11 @@ Use /accept_challenge to accept this challenge!`);
       });
 
       await ctx.reply(`
-🤝 Challenge Accepted!
+🤝 Challenge Accepted On-Chain!
 
 Challenge ID: ${challengeId}
 Acceptor: ${ctx.from?.username}
+Transaction: https://explorer.solana.com/tx/${signature}?cluster=devnet
 
 The match can now begin! Good luck!`);
     } catch (error) {
@@ -371,10 +425,26 @@ The match can now begin! Good luck!`);
     const challengeId = ctx.message.text;
 
     try {
-      await ctx.reply(`
-🔍 Challenge Details (${challengeId}):
+      const challengeDetails = await this.program.account.challenge.fetch(
+        new PublicKey(challengeId)
+      );
 
-Status: Pending implementation`);
+      await ctx.reply(`
+🔍 Challenge Details:
+
+Status: ${
+        challengeDetails.isComplete
+          ? "Completed"
+          : challengeDetails.isActive
+          ? "Active"
+          : "Inactive"
+      }
+Creator: ${challengeDetails.creator.toBase58()}
+Challenger: ${challengeDetails.challenger.toBase58()}
+Wager Amount: ${challengeDetails.wagerAmount.toNumber() / 1e9} SOL
+Created At: ${new Date(challengeDetails.createdAt * 1000).toLocaleString()}
+
+View on Solana Explorer: https://explorer.solana.com/address/${challengeId}?cluster=devnet`);
     } catch (error) {
       await ctx.reply(
         `❌ Error: ${
@@ -393,7 +463,7 @@ Status: Pending implementation`);
 Player Commands:
 /search_player - Search for a League of Legends player
 /get_matches - View player's recent matches
-/create_challenge - Create a new challenge
+/create_challenge - Create a new on-chain challenge
 /accept_challenge - Accept an existing challenge
 /view_challenge - View details of a specific challenge
 
@@ -401,14 +471,14 @@ Other Commands:
 /start - Start the bot
 /help - Show this help message
 
-Need more help? Visit catoff.io/help`;
+For detailed instructions, visit catoff.io/help`;
 
     await ctx.reply(helpMessage);
   }
 
   async broadcastChallenge(details: ChallengeDetails) {
     const message = `
-🎮 New Challenge Created!
+🎮 New Challenge Created On-Chain!
 
 Creator: ${details.creator}
 LoL Account: ${details.riotId}
@@ -433,7 +503,7 @@ Or use /accept_challenge to accept this challenge!`;
     riotId: string;
   }) {
     const message = `
-🤝 Challenge Accepted!
+🤝 Challenge Accepted On-Chain!
 
 Challenge ID: ${details.challengeId}
 Acceptor: ${details.acceptor}
@@ -463,6 +533,7 @@ Winner: ${details.winner}
 Prize: ${details.amount} SOL
 Challenge ID: ${details.challengeId}${statsMessage}
 
+View transaction on Solana Explorer!
 Create your own challenge at catoff.io!`;
 
     try {
@@ -474,9 +545,34 @@ Create your own challenge at catoff.io!`;
     }
   }
 
+  async completeChallenge(
+    challengeId: string,
+    winner: PublicKey,
+    creator: Keypair,
+    challenger: Keypair,
+    zkProof: number[]
+  ) {
+    try {
+      const signature = await this.program.methods
+        .completeChallenge(winner, Buffer.from(zkProof))
+        .accounts({
+          challenge: new PublicKey(challengeId),
+          creator: creator.publicKey,
+          challenger: challenger.publicKey,
+        })
+        .signers([creator, challenger])
+        .rpc();
+
+      return signature;
+    } catch (error) {
+      console.error("Error completing challenge:", error);
+      throw error;
+    }
+  }
+
   start() {
     this.bot.launch();
-    console.log("Telegram bot started");
+    console.log("Telegram bot started with Solana integration");
 
     process.once("SIGINT", () => this.bot.stop("SIGINT"));
     process.once("SIGTERM", () => this.bot.stop("SIGTERM"));
