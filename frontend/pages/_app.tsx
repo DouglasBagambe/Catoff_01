@@ -1,4 +1,4 @@
-// pages/_app.tsx
+// frontend/pages/_app.tsx
 import { AppProps } from "next/app";
 import { WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";

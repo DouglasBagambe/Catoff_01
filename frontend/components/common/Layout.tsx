@@ -1,3 +1,5 @@
+// frontend/components/common/Layout.tsx
+
 import React from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useRouter } from "next/router";
@@ -21,20 +23,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               >
                 Catoff
               </h1>
-              {/* <div className="hidden md:flex space-x-6">
-                <button
-                  onClick={() => router.push("/challenges")}
-                  className="text-gray-300 hover:text-white transition-colors"
-                >
-                  Challenges
-                </button>
-                <button
-                  onClick={() => router.push("/leaderboard")}
-                  className="text-gray-300 hover:text-white transition-colors"
-                >
-                  Leaderboard
-                </button>
-              </div> */}
             </div>
             <WalletMultiButton />
           </div>

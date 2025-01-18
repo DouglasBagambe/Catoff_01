@@ -33,7 +33,8 @@ export const useProgram = () => {
         setError(null);
 
         const connection = new Connection(
-          process.env.NEXT_PUBLIC_RPC_ENDPOINT || "http://localhost:8899"
+          process.env.NEXT_PUBLIC_RPC_ENDPOINT ||
+            "https://api.devnet.solana.com"
         );
 
         const provider = new AnchorProvider(

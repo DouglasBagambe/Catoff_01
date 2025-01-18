@@ -1,3 +1,5 @@
+// frontend/components/gaming/PlayerSearch.tsx
+
 import React, { useState } from "react";
 import {
   Search,

@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
+    "typeRoots": ["*./node_modules/@types", "*./types"],
     "jsx": "preserve",
     /* Visit https://aka.ms/tsconfig to read more about this file */
     /* Projects */
@@ -105,9 +106,13 @@
     "strictNullChecks": true
   },
   "include": [
-    "src/**/*" // Include all files under src folder
-    // "frontend/pages",
-    // "frontend/components"
+    "src/**/*", // Include all files under src folder
+    "frontend/pages",
+    "frontend/components",
+    "../gaming_challenge/target/types/**/*.ts",
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx"
   ],
   "exclude": [
     "node_modules", // Exclude node_modules folder

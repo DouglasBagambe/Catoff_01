@@ -1,4 +1,7 @@
-import React, { useState } from "react";
+// frontend/components/gaming/ChallengeComponents.tsx
+import React, { useState, useCallback } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useSolanaChallenge } from "@/hooks/useSolanaChallenge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +27,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Sword, Trophy, User, Wallet, Clock, CheckCircle } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 interface Challenge {
   id: string;
@@ -47,17 +51,35 @@ const CreateChallengeDialog: React.FC<{
 }> = ({ isOpen, onClose, onCreateChallenge }) => {
   const [riotId, setRiotId] = useState("");
   const [wagerAmount, setWagerAmount] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { createChallenge } = useSolanaChallenge();
+  const { connected } = useWallet();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onCreateChallenge({
-      creator: "user", // Replace with actual wallet address
-      riotId,
-      wagerAmount: parseFloat(wagerAmount),
-    });
-    onClose();
-    setRiotId("");
-    setWagerAmount("");
+    if (!connected) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const challengeId = await createChallenge(parseFloat(wagerAmount));
+      onCreateChallenge({
+        creator: "user",
+        riotId,
+        wagerAmount: parseFloat(wagerAmount),
+      });
+      toast.success("Challenge created successfully!");
+      onClose();
+      setRiotId("");
+      setWagerAmount("");
+    } catch (error) {
+      toast.error("Failed to create challenge");
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -181,6 +203,30 @@ const ChallengeDetailsDialog: React.FC<{
   onAcceptChallenge: (challengeId: string) => void;
 }> = ({ challenge, isOpen, onClose, onAcceptChallenge }) => {
   const [showConfirmAccept, setShowConfirmAccept] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { acceptChallenge } = useSolanaChallenge();
+  const { connected } = useWallet();
+
+  const handleAcceptChallenge = async (challengeId: string) => {
+    if (!connected) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await acceptChallenge(challengeId);
+      onAcceptChallenge(challengeId);
+      toast.success("Challenge accepted successfully!");
+      setShowConfirmAccept(false);
+      onClose();
+    } catch (error) {
+      toast.error("Failed to accept challenge");
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (!challenge) return null;
 
