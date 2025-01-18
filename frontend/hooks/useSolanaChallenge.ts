@@ -1,13 +1,6 @@
-// frontend/hooks/useSolanaChallenge.ts
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Program, AnchorProvider, Idl } from "@project-serum/anchor";
-import {
-  Connection,
-  PublicKey,
-  SystemProgram,
-  Keypair,
-  TransactionSignature,
-} from "@solana/web3.js";
+import { Connection, PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 import * as anchor from "@project-serum/anchor";
 import { IDL } from "../types/gaming_challenge";
 
@@ -31,30 +24,21 @@ interface ChallengeDetails {
 
 export const useSolanaChallenge = () => {
   const { connection } = useConnection();
-  const { publicKey, sendTransaction } = useWallet();
+  const { publicKey, signTransaction } = useWallet();
 
   const getProvider = () => {
-    if (!publicKey) {
-      throw new Error("Wallet not connected!");
+    if (!publicKey || !signTransaction) {
+      throw new Error("Wallet not connected");
     }
 
     const provider = new AnchorProvider(
       connection,
       {
         publicKey,
-        signTransaction: async (tx) => {
-          try {
-            const signature = await sendTransaction(tx, connection, {
-              preflightCommitment: "confirmed",
-            });
-            await connection.confirmTransaction(signature, "confirmed");
-            return tx;
-          } catch (error) {
-            console.error("Transaction signing failed:", error);
-            throw new Error("Failed to sign transaction");
-          }
+        signTransaction,
+        signAllTransactions: async (txs) => {
+          return Promise.all(txs.map((tx) => signTransaction(tx)));
         },
-        signAllTransactions: undefined as any,
       },
       { commitment: "confirmed" }
     );
@@ -69,58 +53,69 @@ export const useSolanaChallenge = () => {
 
   const createChallenge = async (wagerAmount: number): Promise<string> => {
     try {
+      if (!publicKey || !signTransaction) {
+        throw new Error("Wallet not connected");
+      }
+
       if (wagerAmount <= 0) {
         throw new Error("Wager amount must be greater than 0");
       }
 
       const program = getProgram();
       const challenge = Keypair.generate();
+
+      // Convert SOL to lamports
       const lamports = wagerAmount * anchor.web3.LAMPORTS_PER_SOL;
 
-      // Generate random stats hash (32 bytes)
+      // Generate random stats hash
       const statsHash = Array.from({ length: 32 }, () =>
         Math.floor(Math.random() * 256)
       );
 
+      // First, create the challenge account and transfer the wager
       const tx = await program.methods
         .createChallenge(new anchor.BN(lamports), statsHash)
         .accounts({
           challenge: challenge.publicKey,
-          creator: publicKey!,
+          creator: publicKey,
           systemProgram: SystemProgram.programId,
         })
-        .signers([challenge])
-        .rpc();
+        .signers([challenge]) // Add the challenge keypair as a signer here
+        .rpc({ commitment: "confirmed" }); // Use rpc instead of transaction
 
-      await connection.confirmTransaction(tx, "confirmed");
+      // Return the challenge public key
       return challenge.publicKey.toString();
     } catch (error) {
       console.error("Failed to create challenge:", error);
-      throw new Error(
-        error instanceof Error ? error.message : "Failed to create challenge"
-      );
+      if (error instanceof Error) {
+        // Check for specific error messages
+        if (error.message.includes("0x1")) {
+          throw new Error("Insufficient balance for wager amount");
+        }
+        throw error;
+      }
+      throw new Error("Failed to create challenge");
     }
   };
 
   const acceptChallenge = async (challengeId: string): Promise<boolean> => {
     try {
-      if (!challengeId) {
-        throw new Error("Challenge ID is required");
+      if (!publicKey || !signTransaction) {
+        throw new Error("Wallet not connected");
       }
 
       const program = getProgram();
       const challengePubkey = new PublicKey(challengeId);
 
-      const tx = await program.methods
+      await program.methods
         .acceptChallenge()
         .accounts({
           challenge: challengePubkey,
-          challenger: publicKey!,
+          challenger: publicKey,
           systemProgram: SystemProgram.programId,
         })
-        .rpc();
+        .rpc({ commitment: "confirmed" });
 
-      await connection.confirmTransaction(tx, "confirmed");
       return true;
     } catch (error) {
       console.error("Failed to accept challenge:", error);
@@ -136,27 +131,25 @@ export const useSolanaChallenge = () => {
     stats: GameStats
   ): Promise<boolean> => {
     try {
-      if (!challengeId || !winner) {
-        throw new Error("Challenge ID and winner address are required");
+      if (!publicKey || !signTransaction) {
+        throw new Error("Wallet not connected");
       }
 
       const program = getProgram();
       const challengePubkey = new PublicKey(challengeId);
       const winnerPubkey = new PublicKey(winner);
 
-      // In a real implementation, you would generate a proper ZK proof here
-      const zkProof = new Uint8Array(32); // Placeholder for actual ZK proof
+      const zkProof = new Uint8Array(32); // Replace with actual proof generation if needed
 
-      const tx = await program.methods
+      await program.methods
         .completeChallenge(winnerPubkey, zkProof)
         .accounts({
           challenge: challengePubkey,
-          creator: publicKey!,
+          creator: publicKey,
           challenger: winnerPubkey,
         })
-        .rpc();
+        .rpc({ commitment: "confirmed" });
 
-      await connection.confirmTransaction(tx, "confirmed");
       return true;
     } catch (error) {
       console.error("Failed to complete challenge:", error);
