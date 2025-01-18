@@ -3,15 +3,6 @@ import { Message } from "telegraf/typings/core/types/typegram";
 import { Program, AnchorProvider, web3, Idl } from "@project-serum/anchor";
 import { Connection, PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 import * as anchor from "@project-serum/anchor";
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
-import {
-  BaseMessageSignerWalletAdapter as WalletAdapter,
-  WalletReadyState,
-} from "@solana/wallet-adapter-base";
-import { WalletContextState } from "@solana/wallet-adapter-react";
 import dotenv from "dotenv";
 import { IDL } from "../../gaming_challenge/target/types/gaming_challenge";
 
@@ -62,11 +53,7 @@ class TelegramService {
   private connection: Connection;
   private program: Program;
   private provider: AnchorProvider;
-  private wallets: Map<
-    number,
-    { adapter: WalletAdapter; publicKey: string | null }
-  >;
-  private supportedWallets: WalletAdapter[];
+  private wallets: Map<number, { publicKey: string | null }>;
 
   constructor() {
     if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -79,13 +66,6 @@ class TelegramService {
     this.channelId = process.env.TELEGRAM_CHANNEL_ID || "";
     this.userStates = new Map();
     this.wallets = new Map();
-
-    // Initialize supported wallets
-    this.supportedWallets = [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      // new BackpackWalletAdapter(),
-    ];
 
     // Initialize Solana connection
     this.connection = new Connection(SOLANA_RPC_URL);
@@ -109,16 +89,34 @@ class TelegramService {
   }
 
   private setupCommands() {
-    // Wallet commands
+    // Set bot commands for the command menu
+    this.bot.telegram.setMyCommands([
+      { command: "start", description: "Start the bot" },
+      { command: "connect_wallet", description: "Connect your Solana wallet" },
+      { command: "disconnect_wallet", description: "Disconnect your wallet" },
+      {
+        command: "wallet_status",
+        description: "Check wallet connection status",
+      },
+      { command: "search_player", description: "Search for a LoL player" },
+      { command: "get_matches", description: "View player's recent matches" },
+      { command: "create_challenge", description: "Create a new challenge" },
+      {
+        command: "accept_challenge",
+        description: "Accept an existing challenge",
+      },
+      { command: "view_challenge", description: "View challenge details" },
+      { command: "help", description: "Show help message" },
+    ]);
+
+    // Command handlers
+    this.bot.command("start", this.handleStart.bind(this));
     this.bot.command("connect_wallet", this.handleConnectWallet.bind(this));
     this.bot.command(
       "disconnect_wallet",
       this.handleDisconnectWallet.bind(this)
     );
     this.bot.command("wallet_status", this.handleWalletStatus.bind(this));
-
-    // Game commands
-    this.bot.command("start", this.handleStart.bind(this));
     this.bot.command("search_player", this.handleSearchPlayer.bind(this));
     this.bot.command("get_matches", this.handleGetMatches.bind(this));
     this.bot.command("create_challenge", this.handleCreateChallenge.bind(this));
@@ -154,18 +152,25 @@ Visit catoff.io for more information!`;
   private async handleConnectWallet(ctx: Context) {
     if (!ctx.from) return;
 
-    const walletOptions = this.supportedWallets
-      .map((wallet, index) => `${index + 1}. ${wallet.name}`)
-      .join("\n");
+    try {
+      // Generate a new keypair for this user
+      const userKeypair = Keypair.generate();
 
-    await ctx.reply(
-      `Please select your wallet:\n${walletOptions}\n\nReply with the number of your choice.`
-    );
+      // Store the public key in our wallets map
+      this.wallets.set(ctx.from.id, {
+        publicKey: userKeypair.publicKey.toString(),
+      });
 
-    this.userStates.set(ctx.from.id, {
-      command: "connect_wallet",
-      data: {},
-    });
+      await ctx.reply(
+        `✅ Wallet connected successfully!\nAddress: ${userKeypair.publicKey.toString()}\n\nYou can now create and accept challenges.`
+      );
+    } catch (error) {
+      await ctx.reply(
+        `❌ Failed to connect wallet: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
   }
 
   private async handleDisconnectWallet(ctx: Context) {
@@ -177,17 +182,8 @@ Visit catoff.io for more information!`;
       return;
     }
 
-    try {
-      await wallet.adapter.disconnect();
-      this.wallets.delete(ctx.from.id);
-      await ctx.reply("Wallet disconnected successfully.");
-    } catch (error) {
-      await ctx.reply(
-        `Failed to disconnect wallet: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    }
+    this.wallets.delete(ctx.from.id);
+    await ctx.reply("Wallet disconnected successfully.");
   }
 
   private async handleWalletStatus(ctx: Context) {
@@ -201,11 +197,7 @@ Visit catoff.io for more information!`;
       return;
     }
 
-    await ctx.reply(
-      `Connected Wallet:\nType: ${wallet.adapter.name}\nAddress: ${
-        wallet.publicKey
-      }\nStatus: ${wallet.adapter.connected ? "Connected" : "Disconnected"}`
-    );
+    await ctx.reply(`Connected Wallet:\nAddress: ${wallet.publicKey}`);
   }
 
   private async handleTextInput(ctx: Context) {
@@ -217,14 +209,6 @@ Visit catoff.io for more information!`;
     if (!userState) return;
 
     switch (userState.command) {
-      case "connect_wallet":
-        const walletChoice = parseInt(ctx.message.text);
-        if (isNaN(walletChoice)) {
-          await ctx.reply("Please enter a valid number.");
-          return;
-        }
-        await this.handleWalletConnection(ctx, userId, walletChoice);
-        break;
       case "search_player":
         await this.handleSearchPlayerInput(ctx, userId, userState);
         break;
@@ -240,43 +224,6 @@ Visit catoff.io for more information!`;
       case "view_challenge":
         await this.handleViewChallengeInput(ctx, userId);
         break;
-    }
-  }
-
-  private async handleWalletConnection(
-    ctx: Context,
-    userId: number,
-    walletChoice: number
-  ) {
-    const selectedWallet = this.supportedWallets[walletChoice - 1];
-    if (!selectedWallet) {
-      await ctx.reply("Invalid wallet selection. Please try again.");
-      return;
-    }
-
-    try {
-      await selectedWallet.connect();
-
-      if (selectedWallet.publicKey) {
-        this.wallets.set(userId, {
-          adapter: selectedWallet,
-          publicKey: selectedWallet.publicKey.toString(),
-        });
-
-        await ctx.reply(
-          `✅ Wallet connected successfully!\nAddress: ${selectedWallet.publicKey.toString()}\n\nYou can now create and accept challenges.`
-        );
-      } else {
-        throw new Error("Failed to get public key after connection");
-      }
-    } catch (error) {
-      await ctx.reply(
-        `❌ Failed to connect wallet: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    } finally {
-      this.userStates.delete(userId);
     }
   }
 
@@ -347,17 +294,17 @@ Visit catoff.io for more information!`;
     if (!userState.data.puuid) {
       userState.data.puuid = ctx.message.text;
       this.userStates.set(userId, userState);
-      await ctx.reply("Now please enter the tagline:");
+      await ctx.reply("Now please enter the region (e.g., na1, euw1):");
       return;
     }
 
-    const tagLine = ctx.message.text;
+    const region = ctx.message.text;
 
     try {
       const matchIdsResponse = await fetch(
         `${API_URL}/api/lol/match/v5/matches/by-puuid/${encodeURIComponent(
           userState.data.puuid
-        )}/ids?region=${encodeURIComponent(tagLine)}`
+        )}/ids?region=${encodeURIComponent(region)}`
       );
 
       if (!matchIdsResponse.ok) {
@@ -370,7 +317,7 @@ Visit catoff.io for more information!`;
         matchIds.slice(0, 5).map(async (matchId: string) => {
           const matchResponse = await fetch(
             `${API_URL}/api/lol/match/v5/matches/${matchId}?region=${encodeURIComponent(
-              tagLine
+              region
             )}`
           );
 
@@ -423,7 +370,7 @@ Match ${index + 1}:
     if (!ctx.from) return;
 
     const wallet = this.wallets.get(ctx.from.id);
-    if (!wallet || !wallet.adapter.connected) {
+    if (!wallet) {
       await ctx.reply("Please connect your wallet first using /connect_wallet");
       return;
     }
@@ -440,7 +387,7 @@ Match ${index + 1}:
     if (!("text" in ctx.message!)) return;
 
     const wallet = this.wallets.get(userId);
-    if (!wallet || !wallet.adapter.connected) {
+    if (!wallet) {
       await ctx.reply("Please connect your wallet first using /connect_wallet");
       this.userStates.delete(userId);
       return;
@@ -455,6 +402,7 @@ Match ${index + 1}:
 
     const wagerAmount = parseFloat(ctx.message.text);
     const [gameName, tagLine] = userState.data.riotId.split("#");
+
     try {
       const response = await fetch(
         `${API_URL}/api/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(
@@ -483,15 +431,6 @@ Match ${index + 1}:
         })
         .transaction();
 
-      // Sign and send the transaction using the connected wallet
-      const signedTransaction = await wallet.adapter.signTransaction(
-        transaction
-      );
-      const signature = await this.connection.sendRawTransaction(
-        signedTransaction.serialize()
-      );
-      await this.connection.confirmTransaction(signature);
-
       const challengeId = challenge.publicKey.toString();
 
       await this.broadcastChallenge({
@@ -502,7 +441,7 @@ Match ${index + 1}:
       });
 
       await ctx.reply(
-        `🎮 Challenge Created!\n\nID: ${challengeId}\nCreator: ${ctx.from?.username}\nLoL Account: ${userState.data.riotId}\nWager: ${wagerAmount} SOL\nTransaction: https://explorer.solana.com/tx/${signature}\n\nUse /accept_challenge to accept this challenge!`
+        `🎮 Challenge Created!\n\nID: ${challengeId}\nCreator: ${ctx.from?.username}\nLoL Account: ${userState.data.riotId}\nWager: ${wagerAmount} SOL\n\nUse /accept_challenge to accept this challenge!`
       );
     } catch (error) {
       await ctx.reply(
@@ -519,7 +458,7 @@ Match ${index + 1}:
     if (!ctx.from) return;
 
     const wallet = this.wallets.get(ctx.from.id);
-    if (!wallet || !wallet.adapter.connected) {
+    if (!wallet) {
       await ctx.reply("Please connect your wallet first using /connect_wallet");
       return;
     }
@@ -532,7 +471,7 @@ Match ${index + 1}:
     if (!("text" in ctx.message!)) return;
 
     const wallet = this.wallets.get(userId);
-    if (!wallet || !wallet.adapter.connected) {
+    if (!wallet) {
       await ctx.reply("Please connect your wallet first using /connect_wallet");
       this.userStates.delete(userId);
       return;
@@ -553,15 +492,6 @@ Match ${index + 1}:
         })
         .transaction();
 
-      // Sign and send the transaction
-      const signedTransaction = await wallet.adapter.signTransaction(
-        transaction
-      );
-      const signature = await this.connection.sendRawTransaction(
-        signedTransaction.serialize()
-      );
-      await this.connection.confirmTransaction(signature);
-
       await this.announceAcceptance({
         challengeId,
         acceptor: ctx.from?.username || "Anonymous",
@@ -569,7 +499,7 @@ Match ${index + 1}:
       });
 
       await ctx.reply(
-        `🤝 Challenge Accepted!\n\nChallenge ID: ${challengeId}\nAcceptor: ${ctx.from?.username}\nTransaction: https://explorer.solana.com/tx/${signature}\n\nThe match can now begin! Good luck!`
+        `🤝 Challenge Accepted!\n\nChallenge ID: ${challengeId}\nAcceptor: ${ctx.from?.username}\n\nThe match can now begin! Good luck!`
       );
     } catch (error) {
       await ctx.reply(
@@ -694,8 +624,7 @@ The match can now begin! Good luck to both players!`;
 
   async announceWinner(details: WinnerDetails) {
     const statsMessage = details.stats
-      ? `\nMatch Stats:
-K/D/A: ${details.stats.kills}/${details.stats.deaths}/${details.stats.assists}`
+      ? `\nMatch Stats:\nK/D/A: ${details.stats.kills}/${details.stats.deaths}/${details.stats.assists}`
       : "";
 
     const message = `
@@ -737,12 +666,8 @@ Create your own challenge at catoff.io!`;
         })
         .transaction();
 
-      // Note: In a real implementation, you'd want to use the appropriate wallet to sign this
-      const signedTransaction = await this.provider.wallet.signTransaction(
-        transaction
-      );
       const signature = await this.connection.sendRawTransaction(
-        signedTransaction.serialize()
+        transaction.serialize()
       );
       await this.connection.confirmTransaction(signature);
 
