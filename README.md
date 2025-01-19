@@ -1,4 +1,4 @@
-# Catoff Gaming Integration
+# Catoff Gaming
 
 ## Overview
 
