@@ -2,7 +2,7 @@
 
 ## Overview
 
-Catoff Gaming Integration is a comprehensive system that enables peer-to-peer in-game wagering with seamless stats verification and social media integration. The platform supports multiple gaming APIs and provides privacy-preserving verification through zero-knowledge proofs.
+Catoff Gaming Integration is a comprehensive system that enables peer-to-peer in-game wagering with seamless stats verification and social media integration. The platform supports multiple gaming APIs and provides privacy-preserving verification through zero knowledge proofs.
 
 ## Features
 
